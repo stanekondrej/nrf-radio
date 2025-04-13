@@ -1,14 +1,38 @@
 #![no_std]
 #![deny(clippy::missing_crate_level_docs)]
 
+pub mod packet;
+
+use core::mem;
+
 // FIXME: fix dependency on singular crate
 use nrf51_hal::pac;
+
+// TODO: this is definitely true on the nRF51822, but I'm not sure about other ones
+pub const MAX_PACKET_LENGTH: usize = 254;
 
 /// RADIO peripheral
 pub struct Radio {
     radio: pac::RADIO,
+
+    _buf: [u8; MAX_PACKET_LENGTH],
 }
 
+/// Radio state; useful for determining whether it's in `Tx`, `Rx`, or `Disabled` mode
+#[derive(Debug)]
+pub enum State {
+    Disabled = 0,
+    RxRu = 1,
+    RxIdle = 2,
+    Rx = 3,
+    RxDisable = 4,
+    TxRu = 9,
+    TxIdle = 10,
+    Tx = 11,
+    TxDisable = 12,
+}
+
+/// Transmission power
 pub enum TxPower {
     Pos4dBm = 0x04,
     _0dBm = 0x00,
@@ -20,6 +44,7 @@ pub enum TxPower {
     Neg30dBm = 0xD8,
 }
 
+/// The different protocols and speeds supported by the radio
 pub enum Mode {
     Nrf1Mbit = 0,
     Nrf2Mbit = 1,
@@ -27,7 +52,7 @@ pub enum Mode {
     Ble1Mbit = 3,
 }
 
-#[allow(clippy::enum_variant_names)]
+/// **Basically** simpler representations of in-air physical addresses
 pub enum LogicalAddress {
     _0 = 0,
     _1 = 1,
@@ -39,10 +64,47 @@ pub enum LogicalAddress {
     _7 = 7,
 }
 
+/// Events emitted by the radio when certain things happen.
+///
+/// A good example is the `END` event that is emitted **when a packet is received,**
+/// and at the end of the transmission of a packet.
+pub enum Event {
+    Ready = 0,
+    Address = 1,
+    Payload = 2,
+    End = 3,
+    Disabled = 4,
+    DevMatch = 5,
+    DevMiss = 6,
+    RSSIEnd = 7,
+    BCMatch = 10,
+}
+
 impl Radio {
     /// Creates a new interface to the RADIO peripheral
     pub fn new(radio: pac::RADIO) -> Self {
-        return Self { radio };
+        return Self {
+            radio,
+            _buf: [0; MAX_PACKET_LENGTH],
+        };
+    }
+
+    /// Starts the radio. Depending on the mode, this means either:
+    ///
+    /// - sending the packet specified in `packetptr`
+    /// - receiving a packet into the memore specified in `packetptr`
+    ///
+    /// As you can see, `packetptr` plays an important role. See [`set_packet_addr`].
+    pub fn start(&self) {
+        self.radio.tasks_start.write(|w| unsafe { w.bits(0b1) });
+    }
+
+    /// Stops the radio. This might not seem very useful, but it can probably come in
+    /// handy when you're receiving packets and you need to send something once in
+    /// a while. Then, you can call this from an interrupt, send a packet, and go back
+    /// to receiving for a while (or something).
+    pub fn stop(&self) {
+        self.radio.tasks_stop.write(|w| unsafe { w.bits(0b1) });
     }
 
     /// Switches the radio to receive mode. This function calls [`disable`] internally.
@@ -51,11 +113,20 @@ impl Radio {
         self.radio.tasks_rxen.write(|w| unsafe { w.bits(0b1) });
     }
 
+    /// Call this after the `END` event, when the radio is in `Rx`. You can check
+    /// the mode by calling [`check_state`]
+    pub fn handle_incoming_packet(&self) {}
+
     /// Switches the radio to transmission mode. This function calls [`disable`]
     /// internally.
     pub fn switch_tx(&self) {
         self.disable();
         self.radio.tasks_txen.write(|w| unsafe { w.bits(0b1) });
+    }
+
+    pub fn check_state(&self) -> State {
+        let state = self.radio.state.read().bits();
+        unsafe { mem::transmute(state as u8) }
     }
 
     /// Disables the radio.
@@ -65,6 +136,27 @@ impl Radio {
     /// anyways. See [`switch_tx`] and [`switch_rx`].
     pub fn disable(&self) {
         self.radio.tasks_disable.write(|w| unsafe { w.bits(0b1) });
+    }
+
+    /// Enables interrupts to be emitted by the event specified
+    pub fn enable_event(&self, event: Event) {
+        self.radio
+            .intenset
+            .write(|w| unsafe { w.bits(0b1 << event as u8) });
+    }
+
+    /// Unsets the bit signaling the firing of an event
+    pub fn clear_event(&self, event: Event) {
+        self.radio
+            .intenclr
+            .write(|w| unsafe { w.bits(0b1 << event as u8) });
+    }
+
+    /// Clear all events
+    pub fn clear_events(&self) {
+        self.radio
+            .intenclr
+            .write(|w| unsafe { w.bits(0b10_0111_1111) });
     }
 
     /// Set the logical address to send packets from.
