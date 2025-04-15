@@ -1,5 +1,9 @@
 # nrf-radio - a high-level interface for the on-board radio of the nRF5xxx SoCs
 
+This crate is very much a work in progress. You probably shouldn't use it yet, as you
+can't even send data between devices as of right now. I am working on it and will
+implement this in the very near future, so please, be patient for now! ❤️
+
 Crate that manifested from https://github.com/nrf-rs/microbit/issues/172.
 Huge thanks to the people that helped me to bring this to life with their helpful
 comments and guidance.
