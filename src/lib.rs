@@ -107,7 +107,7 @@ struct Receiver;
 
 /// RADIO peripheral interface.
 ///
-/// Construct new instances using the [`new_receiver`] or [`new_transmitter`] associated
+/// Construct new instances using the [`Radio::new_receiver`] or [`Radio::new_transmitter`] associated
 /// functions. Then, use `into_receiver` or `into_transmitter` to convert between both
 /// freely and safely.
 ///
@@ -156,10 +156,6 @@ impl<M> Radio<M> {
     }
 
     /// Disables the radio.
-    ///
-    /// You may use this to (for example) save power, but if you just want to switch
-    /// the mode of the radio, this is pointless, as the appropriate functions do this
-    /// anyways. See [`switch_tx`] and [`switch_rx`].
     ///
     /// # Safety
     ///
@@ -292,7 +288,7 @@ impl Radio<Receiver> {
         self.radio.rxaddresses.write(|w| unsafe { w.bits(applied) });
     }
 
-    /// Disables a logical address for listening. See [`enable_rx_address`].
+    /// Disables a logical address for listening. See [`Radio::enable_rx_address`].
     pub fn disable_rx_address(&self, address: LogicalAddress) {
         //   0010_0110
         // ^ 0000_0100
