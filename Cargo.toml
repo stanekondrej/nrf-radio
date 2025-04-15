@@ -1,5 +1,11 @@
 [package]
 name = "nrf-radio"
+description = "A HAL library for nRFxxxx SoCs' RADIO peripheral"
+license = "MIT"
+documentation = "https://docs.rs/nrf-radio"
+homepage = "https://github.com/stanekondrej/nrf-radio"
+repository = "https://github.com/stanekondrej/nrf-radio"
+
 version = "0.1.0"
 edition = "2024"
 
