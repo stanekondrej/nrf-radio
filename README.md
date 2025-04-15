@@ -1,6 +1,6 @@
 # nrf-radio - a high-level interface for the on-board radio of the nRF5xxx SoCs
 
-Crate that manifested from [https://github.com/nrf-rs/microbit/issues/172](this issue).
+Crate that manifested from https://github.com/nrf-rs/microbit/issues/172.
 Huge thanks to the people that helped me to bring this to life with their helpful
 comments and guidance.
 
