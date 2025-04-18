@@ -282,6 +282,15 @@ where
     pub fn get_enabled_rx_addresses(&self) -> u32 {
         self.radio.rxaddresses.read().bits()
     }
+
+    /// Constructs a packet from the data currently in the packet buffer pointed to by
+    /// the packet pointer.
+    ///
+    /// ONLY CALL THIS FROM AN INTERRUPT HANDLER UPON RECEIVING A PACKET. Otherwise, this
+    /// function will produce gibberish.
+    pub fn receive_payload(&self) -> &[u8] {
+        self.handler.receive_payload(&self.radio)
+    }
 }
 
 impl<'r, H> Radio<'r, H, Transmitter>
@@ -337,5 +346,10 @@ where
         ];
 
         levels.iter().find(|&&l| ((l as u32 ^ power) != 0)).copied()
+    }
+
+    /// Uses the radio to send a payload.
+    pub fn send_payload(&self, payload: &'r [u8]) -> Result<(), &'static str> {
+        self.handler.send_payload(&self.radio, payload)
     }
 }
