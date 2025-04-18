@@ -277,7 +277,7 @@ where
     /// ONLY CALL THIS FROM AN INTERRUPT HANDLER UPON RECEIVING A PACKET. Otherwise, this
     /// function will produce gibberish.
     pub fn receive_payload(&self) -> &[u8] {
-        self.handler.receive_payload(&self.radio)
+        unsafe { self.handler.receive_payload(&self.radio) }
     }
 }
 
@@ -333,6 +333,6 @@ where
 
     /// Uses the radio to send a payload.
     pub fn send_payload(&self, payload: &'r [u8]) -> Result<(), &'static str> {
-        self.handler.send_payload(&self.radio, payload)
+        unsafe { self.handler.send_payload(&self.radio, payload) }
     }
 }
