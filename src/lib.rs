@@ -51,6 +51,7 @@ pub struct Radio<M = Receiver> {
 //     }
 // }
 
+#[allow(private_bounds)]
 impl<M: Mode> Radio<M> {
     /// See [`Self::new_receiver`]
     #[allow(private_interfaces)]
