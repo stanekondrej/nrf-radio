@@ -206,6 +206,30 @@ impl<M: Mode> Radio<M> {
             .packetptr
             .write(|w| unsafe { w.bits(&raw const packet as u32) });
     }
+
+    /// Set the frequency at which the radio should broadcast and listen.
+    ///
+    /// This should be a number between 2400 and 2500. Otherwise, it will get clamped
+    /// to this range anyways.
+    pub fn set_frequency(&self, freq: u32) {
+        let freq = if freq > 2500 { 2500 } else { freq };
+        let f = u32::checked_sub(freq, 2400).unwrap_or(0);
+
+        self.radio
+            .frequency
+            .write(|w| unsafe { w.frequency().bits(f as u8) });
+    }
+
+    /// Reads the set frequency from the register.
+    pub fn get_frequency(&self) -> u32 {
+        // THEORETICALLY, this number could be so big that after addition, it could
+        // overflow. Is that a feasible scenario? I don't think so. If stuff breaks for
+        // somebody because of this, I won't be sure what to believe anymore.
+
+        let freq = self.radio.frequency.read().bits();
+        //freq.checked_add(2400).expect("Frequency is set to an astronomically large number.")
+        freq + 2400
+    }
 }
 
 impl Radio<Receiver> {
@@ -257,30 +281,6 @@ impl Radio<Receiver> {
     /// simpler both from an implementation' as well as from a user's perspective.
     pub fn get_enabled_rx_addresses(&self) -> u32 {
         self.radio.rxaddresses.read().bits()
-    }
-
-    /// Set the frequency at which the radio should broadcast and listen.
-    ///
-    /// This should be a number between 2400 and 2500. Otherwise, it will get clamped
-    /// to this range anyways.
-    pub fn set_frequency(&self, freq: u32) {
-        let freq = if freq > 2500 { 2500 } else { freq };
-        let f = u32::checked_sub(freq, 2400).unwrap_or(0);
-
-        self.radio
-            .frequency
-            .write(|w| unsafe { w.frequency().bits(f as u8) });
-    }
-
-    /// Reads the set frequency from the register.
-    pub fn get_frequency(&self) -> u32 {
-        // THEORETICALLY, this number could be so big that after addition, it could
-        // overflow. Is that a feasible scenario? I don't think so. If stuff breaks for
-        // somebody because of this, I won't be sure what to believe anymore.
-
-        let freq = self.radio.frequency.read().bits();
-        //freq.checked_add(2400).expect("Frequency is set to an astronomically large number.")
-        freq + 2400
     }
 }
 
