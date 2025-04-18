@@ -5,6 +5,8 @@
 
 pub mod enums;
 pub mod packet;
+#[macro_use]
+mod util;
 
 use core::{marker::PhantomData, mem};
 
@@ -86,11 +88,18 @@ where
     /// as low as possible, you need to create a new receiver or transmitter the next
     /// time you want to use the RADIO.
     pub unsafe fn disable(&self) {
+        println!("Disabling the radio peripheral");
+
         self.radio.tasks_disable.write(|w| unsafe { w.bits(0b1) });
     }
 
     /// Enables interrupts to be emitted by the event specified
     pub fn enable_event(&self, event: enums::Event) {
+        println!(
+            "Enabling event {}",
+            core::convert::Into::<&'static str>::into(event)
+        );
+
         self.radio
             .intenset
             .write(|w| unsafe { w.bits(0b1 << event as u8) });
@@ -98,6 +107,11 @@ where
 
     /// Unsets the bit signaling the firing of an event
     pub fn clear_event(&self, event: enums::Event) {
+        println!(
+            "Clearing event {}",
+            core::convert::Into::<&'static str>::into(event)
+        );
+
         self.radio
             .intenclr
             .write(|w| unsafe { w.bits(0b1 << event as u8) });
@@ -105,6 +119,8 @@ where
 
     /// Clear all events
     pub fn clear_events(&self) {
+        println!("Clearing all events");
+
         self.radio
             .intenclr
             .write(|w| unsafe { w.bits(0b10_0111_1111) });
@@ -135,6 +151,11 @@ where
 
     /// Sets the radio mode (protocol, tx/rx speed, etc..)
     pub fn set_mode(&self, mode: enums::Mode) {
+        println!(
+            "Setting mode to {}",
+            core::convert::Into::<&'static str>::into(mode)
+        );
+
         self.radio.mode.write(|w| unsafe { w.bits(mode as u32) });
     }
 
@@ -154,6 +175,8 @@ where
     ///
     /// As you can see, `packetptr` plays an important role. See [`set_packet_addr`].
     fn start(&self) {
+        println!("Starting the radio");
+
         self.radio.tasks_start.write(|w| unsafe { w.bits(0b1) });
     }
 
@@ -162,11 +185,15 @@ where
     /// a while. Then, you can call this from an interrupt, send a packet, and go back
     /// to receiving for a while (or something).
     fn stop(&self) {
+        println!("Stopping the radio");
+
         self.radio.tasks_stop.write(|w| unsafe { w.bits(0b1) });
     }
 
     /// Switches the radio to receive mode. This function calls [`disable`] internally.
     fn switch_rx(&self) {
+        println!("Switching to rx");
+
         unsafe {
             self.disable();
         }
@@ -176,6 +203,8 @@ where
     /// Switches the radio to transmission mode. This function calls [`disable`]
     /// internally.
     fn switch_tx(&self) {
+        println!("Switching to tx");
+
         unsafe {
             self.disable();
         }
@@ -185,9 +214,10 @@ where
     /// Sets the pointer to a packet buffer. Should be set to a new value after each
     /// transmission and receival.
     fn set_packet_ptr(&self, packet: &[u8]) {
-        self.radio
-            .packetptr
-            .write(|w| unsafe { w.bits(&raw const packet as u32) });
+        let ptr = &raw const packet as u32;
+        println!("Setting packet pointer to {}", ptr);
+
+        self.radio.packetptr.write(|w| unsafe { w.bits(ptr) });
     }
 
     /// Set the frequency at which the radio should broadcast and listen.
@@ -195,6 +225,8 @@ where
     /// This should be a number between 2400 and 2500. Otherwise, it will get clamped
     /// to this range anyways.
     pub fn set_frequency(&self, freq: u32) {
+        println!("Setting frequency to {}", freq);
+
         let freq = if freq > 2500 { 2500 } else { freq };
         let f = u32::checked_sub(freq, 2400).unwrap_or(0);
 
@@ -242,6 +274,11 @@ where
         //   1111_0101
         //    ^
 
+        println!(
+            "Enabling rx address {}",
+            core::convert::Into::<&'static str>::into(address)
+        );
+
         let current = self.radio.rxaddresses.read().bits();
         let byte = 0b1 << address as u8;
         let applied = current | byte;
@@ -256,6 +293,11 @@ where
         //   ---------
         //   0010_0010
         //         ^
+
+        println!(
+            "Disabling rx address {}",
+            core::convert::Into::<&'static str>::into(address)
+        );
 
         let current = self.radio.rxaddresses.read().bits();
         let byte = 0b1 << address as u8;
@@ -300,6 +342,11 @@ where
 
     /// Set the logical address to send packets from.
     pub fn set_tx_address(&self, address: enums::LogicalAddress) {
+        println!(
+            "Setting tx address to {}",
+            core::convert::Into::<&'static str>::into(address)
+        );
+
         self.radio
             .txaddress
             .write(|w| unsafe { w.txaddress().bits(address as u8) });
@@ -317,6 +364,11 @@ where
     /// Sets the power (in dB) with which the radio should broadcast. More power = higher
     /// energy consumption.
     pub fn set_tx_power(&self, power: enums::TxPower) {
+        println!(
+            "Setting tx power to {}",
+            core::convert::Into::<&'static str>::into(power)
+        );
+
         self.radio
             .txpower
             .write(|w| unsafe { w.txpower().bits(power as u8) });
