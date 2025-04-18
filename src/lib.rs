@@ -11,12 +11,6 @@ use core::{marker::PhantomData, mem};
 // FIXME: fix dependency on singular crate
 use nrf51_hal::pac;
 
-/// The maximum in-ram packet length in bytes.
-// TODO: this is definitely true on the nRF51822, but I'm not sure about other ones
-pub const MAX_PACKET_LENGTH: usize = 254;
-
-type PacketBuf = [u8; MAX_PACKET_LENGTH];
-
 trait Mode {}
 
 #[allow(missing_docs)]
@@ -36,11 +30,15 @@ impl Mode for Receiver {}
 /// To disable the radio peripheral, either let the [`Radio`] struct go out of scope,
 /// drop it manually, or just call [`Radio::disable()`].
 #[allow(private_interfaces)]
-pub struct Radio<M = Receiver> {
+pub struct Radio<'r, H, M = Receiver>
+where
+    H: packet::PacketHandler<'r>,
+{
     radio: pac::RADIO,
+    handler: H,
+    _marker: PhantomData<&'r H>,
 
-    _buf: PacketBuf,
-    _marker: PhantomData<M>,
+    _mode: PhantomData<M>,
 }
 
 // impl<M> Drop for Radio<M> {
@@ -52,30 +50,26 @@ pub struct Radio<M = Receiver> {
 // }
 
 #[allow(private_bounds)]
-impl<M: Mode> Radio<M> {
+impl<'r, M, H> Radio<'r, H, M>
+where
+    M: Mode,
+    H: packet::PacketHandler<'r>,
+{
     /// See [`Self::new_receiver`]
     #[allow(private_interfaces)]
-    pub fn new(radio: pac::RADIO) -> Radio<Receiver> {
-        Self::new_receiver(radio)
+    pub fn new(radio: pac::RADIO, handler: H) -> Radio<'r, H, Receiver> {
+        Self::new_receiver(radio, handler)
     }
 
     /// Creates a new receiving interface to the RADIO peripheral
     #[allow(private_interfaces)]
-    pub fn new_receiver(radio: pac::RADIO) -> Radio<Receiver> {
-        Radio::<Receiver> {
+    pub fn new_receiver(radio: pac::RADIO, handler: H) -> Radio<'r, H, Receiver> {
+        Radio {
             radio,
-            _buf: [0; MAX_PACKET_LENGTH],
-            _marker: PhantomData,
-        }
-    }
+            handler,
 
-    /// Creates a new transmitting interface to the RADIO peripheral
-    #[allow(private_interfaces)]
-    pub fn new_transmitter(radio: pac::RADIO) -> Radio<Transmitter> {
-        Radio::<Transmitter> {
-            radio,
-            _buf: [0; MAX_PACKET_LENGTH],
             _marker: PhantomData,
+            _mode: PhantomData,
         }
     }
 
@@ -233,15 +227,20 @@ impl<M: Mode> Radio<M> {
     }
 }
 
-impl Radio<Receiver> {
+impl<'r, H> Radio<'r, H, Receiver>
+where
+    H: packet::PacketHandler<'r>,
+{
     /// Converts the receiver into a transmitter.
-    pub fn into_transmitter(self) -> Radio<Transmitter> {
+    pub fn into_transmitter(self) -> Radio<'r, H, Transmitter> {
         self.switch_tx();
 
-        Radio::<Transmitter> {
+        Radio {
             radio: self.radio,
-            _buf: self._buf,
+            handler: self.handler,
+
             _marker: PhantomData,
+            _mode: PhantomData,
         }
     }
 
@@ -285,15 +284,20 @@ impl Radio<Receiver> {
     }
 }
 
-impl Radio<Transmitter> {
+impl<'r, H> Radio<'r, H, Transmitter>
+where
+    H: packet::PacketHandler<'r>,
+{
     /// Converts the transmitter into a receiver.
-    pub fn into_receiver(self) -> Radio<Receiver> {
+    pub fn into_receiver(self) -> Radio<'r, H, Receiver> {
         self.switch_rx();
 
-        Radio::<Receiver> {
+        Radio {
             radio: self.radio,
-            _buf: self._buf,
+            handler: self.handler,
+
             _marker: PhantomData,
+            _mode: PhantomData,
         }
     }
 
