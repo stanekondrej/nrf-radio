@@ -12,6 +12,7 @@ use core::{marker::PhantomData, mem};
 
 // FIXME: fix dependency on singular crate
 use nrf51_hal::pac;
+use packet::PacketHandler;
 
 trait Mode {}
 
@@ -19,17 +20,19 @@ trait Mode {}
 pub struct Transmitter;
 #[allow(missing_docs)]
 pub struct Receiver;
+#[allow(missing_docs)]
+pub struct Disabled;
 
 impl Mode for Transmitter {}
 impl Mode for Receiver {}
+impl Mode for Disabled {}
 
 /// RADIO peripheral interface.
 ///
-/// Construct new instances using [`Radio::new`] (or [`Radio::new_receiver`], they're
-/// equivalent). Then, use [`Radio::into_receiver`] or [`Radio::into_transmitter`] to
-/// convert between both freely and safely.
+/// Construct new instances using [`Radio::new`]. Then, use [`Radio::into_receiver`] or
+/// [`Radio::into_transmitter`] to convert between both freely and safely.
 ///
-/// To disable the radio peripheral, call [`Radio::disable()`].
+/// To disable the radio peripheral, call [`Self::into_disabled()`].
 #[allow(private_interfaces)]
 pub struct Radio<'r, H, M = Receiver>
 where
@@ -56,15 +59,11 @@ where
     M: Mode,
     H: packet::PacketHandler<'r>,
 {
-    /// See [`Self::new_receiver`]
+    /// Creates a new interface to the radio. Use the space after calling this function
+    /// to set up interrupt handlers and the like. Then, use either [`Self::into_receiver`] or
+    /// [`Self::into_transmitter`] to enable the radio.
     #[allow(private_interfaces)]
-    pub fn new(radio: pac::RADIO, handler: H) -> Radio<'r, H, Receiver> {
-        Self::new_receiver(radio, handler)
-    }
-
-    /// Creates a new receiving interface to the RADIO peripheral
-    #[allow(private_interfaces)]
-    pub fn new_receiver(radio: pac::RADIO, handler: H) -> Radio<'r, H, Receiver> {
+    pub fn new(radio: pac::RADIO, handler: H) -> Radio<'r, H, Disabled> {
         Radio {
             radio,
             handler,
@@ -81,13 +80,7 @@ where
     }
 
     /// Disables the radio.
-    ///
-    /// # Safety
-    ///
-    /// This function disables the radio peripheral. In order to keep the code complexity
-    /// as low as possible, you need to create a new receiver or transmitter the next
-    /// time you want to use the RADIO.
-    pub unsafe fn disable(&self) {
+    fn disable(&self) {
         println!("Disabling the radio peripheral");
 
         self.radio.tasks_disable.write(|w| unsafe { w.bits(0b1) });
@@ -128,7 +121,7 @@ where
 
     /// Returns the raw bit representation from the register. Use bitwise AND `((reg ^
     /// variant as u32) != 0)` to check whether a certain event is active. This is
-    /// simpler both from an implementation' as well as from a user's perspective.
+    /// simpler both from an implementation's as well as from a user's perspective.
     ///
     /// It is theoretically possible that two or more events are active at once. It
     /// SHOULD never happen (if the user/programmer handles interrupts properly).
@@ -168,35 +161,11 @@ where
         enums::Mode::iter().find(|&m| (mode ^ m as u32) != 0)
     }
 
-    /// Starts the radio. Depending on the mode, this means either:
-    ///
-    /// - sending the packet specified in `packetptr`
-    /// - receiving a packet into the memore specified in `packetptr`
-    ///
-    /// As you can see, `packetptr` plays an important role. See [`set_packet_addr`].
-    fn start(&self) {
-        println!("Starting the radio");
-
-        self.radio.tasks_start.write(|w| unsafe { w.bits(0b1) });
-    }
-
-    /// Stops the radio. This might not seem very useful, but it can probably come in
-    /// handy when you're receiving packets and you need to send something once in
-    /// a while. Then, you can call this from an interrupt, send a packet, and go back
-    /// to receiving for a while (or something).
-    fn stop(&self) {
-        println!("Stopping the radio");
-
-        self.radio.tasks_stop.write(|w| unsafe { w.bits(0b1) });
-    }
-
     /// Switches the radio to receive mode. This function calls [`disable`] internally.
     fn switch_rx(&self) {
         println!("Switching to rx");
 
-        unsafe {
-            self.disable();
-        }
+        self.disable();
         self.radio.tasks_rxen.write(|w| unsafe { w.bits(0b1) });
     }
 
@@ -205,19 +174,8 @@ where
     fn switch_tx(&self) {
         println!("Switching to tx");
 
-        unsafe {
-            self.disable();
-        }
+        self.disable();
         self.radio.tasks_txen.write(|w| unsafe { w.bits(0b1) });
-    }
-
-    /// Sets the pointer to a packet buffer. Should be set to a new value after each
-    /// transmission and receival.
-    fn set_packet_ptr(&self, packet: &[u8]) {
-        let ptr = &raw const packet as u32;
-        println!("Setting packet pointer to {}", ptr);
-
-        self.radio.packetptr.write(|w| unsafe { w.bits(ptr) });
     }
 
     /// Set the frequency at which the radio should broadcast and listen.
@@ -244,6 +202,48 @@ where
         let freq = self.radio.frequency.read().bits();
         //freq.checked_add(2400).expect("Frequency is set to an astronomically large number.")
         freq + 2400
+    }
+    /// Set the logical address to send packets from.
+    pub fn set_tx_address(&self, address: enums::LogicalAddress) {
+        println!(
+            "Setting tx address to {}",
+            core::convert::Into::<&'static str>::into(address)
+        );
+
+        self.radio
+            .txaddress
+            .write(|w| unsafe { w.txaddress().bits(address as u8) });
+    }
+
+    /// Reads the enabled Tx address from the register.
+    pub fn get_tx_address(&self) -> Option<enums::LogicalAddress> {
+        use strum::IntoEnumIterator;
+
+        let addr = self.radio.txaddress.read().bits();
+
+        enums::LogicalAddress::iter().find(|&a| (addr ^ a as u32) != 0)
+    }
+
+    /// Sets the power (in dB) with which the radio should broadcast. More power = higher
+    /// energy consumption.
+    pub fn set_tx_power(&self, power: enums::TxPower) {
+        println!(
+            "Setting tx power to {}",
+            core::convert::Into::<&'static str>::into(power)
+        );
+
+        self.radio
+            .txpower
+            .write(|w| unsafe { w.txpower().bits(power as u8) });
+    }
+
+    /// Reads the set Tx poewr from the register.
+    pub fn get_tx_power(&self) -> Option<enums::TxPower> {
+        use strum::IntoEnumIterator;
+
+        let power = self.radio.txpower.read().bits();
+
+        enums::TxPower::iter().find(|&l| ((l as u32 ^ power) != 0))
     }
 }
 
@@ -321,6 +321,19 @@ where
     pub fn receive_payload(&self) -> &[u8] {
         unsafe { self.handler.receive_payload(&self.radio) }
     }
+
+    /// Disables the radio peripheral.
+    pub fn into_disabled(self) -> Radio<'r, H, Disabled> {
+        self.disable();
+
+        Radio {
+            radio: self.radio,
+            handler: self.handler,
+
+            _marker: PhantomData,
+            _mode: PhantomData,
+        }
+    }
 }
 
 impl<'r, H> Radio<'r, H, Transmitter>
@@ -340,51 +353,52 @@ where
         }
     }
 
-    /// Set the logical address to send packets from.
-    pub fn set_tx_address(&self, address: enums::LogicalAddress) {
-        println!(
-            "Setting tx address to {}",
-            core::convert::Into::<&'static str>::into(address)
-        );
-
-        self.radio
-            .txaddress
-            .write(|w| unsafe { w.txaddress().bits(address as u8) });
-    }
-
-    /// Reads the enabled Tx address from the register.
-    pub fn get_tx_address(&self) -> Option<enums::LogicalAddress> {
-        use strum::IntoEnumIterator;
-
-        let addr = self.radio.txaddress.read().bits();
-
-        enums::LogicalAddress::iter().find(|&a| (addr ^ a as u32) != 0)
-    }
-
-    /// Sets the power (in dB) with which the radio should broadcast. More power = higher
-    /// energy consumption.
-    pub fn set_tx_power(&self, power: enums::TxPower) {
-        println!(
-            "Setting tx power to {}",
-            core::convert::Into::<&'static str>::into(power)
-        );
-
-        self.radio
-            .txpower
-            .write(|w| unsafe { w.txpower().bits(power as u8) });
-    }
-
-    /// Reads the set Tx poewr from the register.
-    pub fn get_tx_power(&self) -> Option<enums::TxPower> {
-        use strum::IntoEnumIterator;
-
-        let power = self.radio.txpower.read().bits();
-
-        enums::TxPower::iter().find(|&l| ((l as u32 ^ power) != 0))
-    }
-
     /// Uses the radio to send a payload.
     pub fn send_payload(&self, payload: &'r [u8]) -> Result<(), &'static str> {
         unsafe { self.handler.send_payload(&self.radio, payload) }
+    }
+
+    /// Disables the peripheral.
+    pub fn into_disabled(self) -> Radio<'r, H, Disabled> {
+        self.disable();
+
+        Radio {
+            radio: self.radio,
+            handler: self.handler,
+
+            _marker: PhantomData,
+            _mode: PhantomData,
+        }
+    }
+}
+
+impl<'r, H> Radio<'r, H, Disabled>
+where
+    H: PacketHandler<'r>,
+{
+    /// Enables the radio in transmit mode.
+    pub fn into_transmitter(self) -> Radio<'r, H, Transmitter> {
+        self.switch_tx();
+
+        Radio {
+            radio: self.radio,
+            handler: self.handler,
+
+            _marker: PhantomData,
+            _mode: PhantomData,
+        }
+    }
+
+    /// Enables the radio in receiver mode.
+    pub fn into_receiver(self) -> Radio<'r, H, Receiver> {
+        self.switch_rx();
+
+        Radio {
+            radio: self.radio,
+            handler: self.handler,
+
+            _marker: PhantomData,
+            _mode: PhantomData,
+        }
     }
 }

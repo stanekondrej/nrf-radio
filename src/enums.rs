@@ -39,7 +39,7 @@ pub enum TxPower {
 }
 
 /// The different protocols and speeds supported by the radio. The `Nrf` modes are
-/// Nordic's proprietary implementations, while `Ble1Mbit is just` Bluetooth low energy.
+/// Nordic's proprietary implementations, while `Ble1Mbit` is just Bluetooth low energy.
 #[allow(missing_docs)] // better described by the enum doc
 #[derive(Clone, Copy, strum::EnumIter, strum::IntoStaticStr)]
 pub enum Mode {
