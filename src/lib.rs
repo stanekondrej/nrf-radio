@@ -17,8 +17,15 @@ pub const MAX_PACKET_LENGTH: usize = 254;
 
 type PacketBuf = [u8; MAX_PACKET_LENGTH];
 
-struct Transmitter;
-struct Receiver;
+trait Mode {}
+
+#[allow(missing_docs)]
+pub struct Transmitter;
+#[allow(missing_docs)]
+pub struct Receiver;
+
+impl Mode for Transmitter {}
+impl Mode for Receiver {}
 
 /// RADIO peripheral interface.
 ///
@@ -44,7 +51,7 @@ pub struct Radio<M = Receiver> {
 //     }
 // }
 
-impl<M> Radio<M> {
+impl<M: Mode> Radio<M> {
     /// See [`Self::new_receiver`]
     #[allow(private_interfaces)]
     pub fn new(radio: pac::RADIO) -> Radio<Receiver> {
