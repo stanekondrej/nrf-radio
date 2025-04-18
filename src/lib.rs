@@ -28,7 +28,8 @@ struct Receiver;
 ///
 /// To disable the radio peripheral, either let the [`Radio`] struct go out of scope,
 /// drop it manually, or just call [`Radio::disable()`].
-pub struct Radio<M> {
+#[allow(private_interfaces)]
+pub struct Radio<M = Receiver> {
     radio: pac::RADIO,
 
     _buf: PacketBuf,
@@ -44,6 +45,12 @@ pub struct Radio<M> {
 // }
 
 impl<M> Radio<M> {
+    /// See [`Self::new_receiver`]
+    #[allow(private_interfaces)]
+    pub fn new(radio: pac::RADIO) -> Radio<Receiver> {
+        Self::new_receiver(radio)
+    }
+
     /// Creates a new receiving interface to the RADIO peripheral
     #[allow(private_interfaces)]
     pub fn new_receiver(radio: pac::RADIO) -> Radio<Receiver> {
