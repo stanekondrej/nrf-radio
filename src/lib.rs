@@ -109,6 +109,16 @@ impl<M> Radio<M> {
             .write(|w| unsafe { w.bits(0b10_0111_1111) });
     }
 
+    /// Returns the raw bit representation from the register. Use bitwise AND `((reg ^
+    /// variant as u32) != 0)` to check whether a certain event is active. This is
+    /// simpler both from an implementation' as well as from a user's perspective.
+    ///
+    /// It is theoretically possible that two or more events are active at once. It
+    /// SHOULD never happen (if the user/programmer handles interrupts properly).
+    pub fn get_active_events(&self) -> u32 {
+        self.radio.intenset.read().bits()
+    }
+
     /// Gets the event that is currently set as active. Note that this expects only one
     /// event to be set at a time.
     ///
@@ -135,6 +145,16 @@ impl<M> Radio<M> {
     /// Sets the radio mode (protocol, tx/rx speed, etc..)
     pub fn set_mode(&self, mode: enums::Mode) {
         self.radio.mode.write(|w| unsafe { w.bits(mode as u32) });
+    }
+
+    /// Reads the set radio mode from the register.
+    pub fn get_mode(&self) -> Option<enums::Mode> {
+        use enums::Mode::*;
+
+        let mode = self.radio.mode.read().bits();
+        let modes = [Nrf250Kbit, Nrf1Mbit, Nrf2Mbit, Ble1Mbit];
+
+        modes.iter().find(|&&m| (mode ^ m as u32) != 0).copied()
     }
 
     /// Starts the radio. Depending on the mode, this means either:
@@ -224,6 +244,14 @@ impl Radio<Receiver> {
 
         self.radio.rxaddresses.write(|w| unsafe { w.bits(applied) });
     }
+
+    /// Returns the raw bit representation from the register. Use bitwise AND `((reg ^
+    /// variant as u32) != 0)` to check whether a certain address is enabled. This is
+    /// simpler both from an implementation' as well as from a user's perspective.
+    pub fn get_enabled_rx_addresses(&self) -> u32 {
+        self.radio.rxaddresses.read().bits()
+    }
+
     /// Set the frequency at which the radio should broadcast and listen.
     ///
     /// This should be a number between 2400 and 2500. Otherwise, it will get clamped
@@ -235,6 +263,17 @@ impl Radio<Receiver> {
         self.radio
             .frequency
             .write(|w| unsafe { w.frequency().bits(f as u8) });
+    }
+
+    /// Reads the set frequency from the register.
+    pub fn get_frequency(&self) -> u32 {
+        // THEORETICALLY, this number could be so big that after addition, it could
+        // overflow. Is that a feasible scenario? I don't think so. If stuff breaks for
+        // somebody because of this, I won't be sure what to believe anymore.
+
+        let freq = self.radio.frequency.read().bits();
+        //freq.checked_add(2400).expect("Frequency is set to an astronomically large number.")
+        freq + 2400
     }
 }
 
@@ -257,11 +296,34 @@ impl Radio<Transmitter> {
             .write(|w| unsafe { w.txaddress().bits(address as u8) });
     }
 
+    /// Reads the enabled Tx address from the register.
+    pub fn get_tx_address(&self) -> Option<enums::LogicalAddress> {
+        use enums::LogicalAddress::*;
+
+        let addr = self.radio.txaddress.read().bits();
+        // FIXME: rewrite this to be auto-generated from the actual enum (see strum)
+        let addresses = [_0, _1, _2, _3, _4, _5, _6, _7];
+
+        addresses.iter().find(|&&a| (addr ^ a as u32) != 0).copied()
+    }
+
     /// Sets the power (in dB) with which the radio should broadcast. More power = higher
     /// energy consumption.
     pub fn set_tx_power(&self, power: enums::TxPower) {
         self.radio
             .txpower
             .write(|w| unsafe { w.txpower().bits(power as u8) });
+    }
+
+    /// Reads the set Tx poewr from the register.
+    pub fn get_tx_power(&self) -> Option<enums::TxPower> {
+        use enums::TxPower::*;
+
+        let power = self.radio.txpower.read().bits();
+        let levels = [
+            Pos4dBm, _0dBm, Neg4dBm, Neg8dBm, Neg12dBm, Neg16dBm, Neg20dBm, Neg30dBm,
+        ];
+
+        levels.iter().find(|&&l| ((l as u32 ^ power) != 0)).copied()
     }
 }
