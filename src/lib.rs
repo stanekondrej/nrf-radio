@@ -8,7 +8,6 @@ pub mod packet;
 
 use core::{marker::PhantomData, mem};
 
-use enums::EventIter;
 // FIXME: fix dependency on singular crate
 use nrf51_hal::pac;
 
@@ -24,12 +23,11 @@ impl Mode for Receiver {}
 
 /// RADIO peripheral interface.
 ///
-/// Construct new instances using the [`Radio::new_receiver`] or [`Radio::new_transmitter`] associated
-/// functions. Then, use `into_receiver` or `into_transmitter` to convert between both
-/// freely and safely.
+/// Construct new instances using [`Radio::new`] (or [`Radio::new_receiver`], they're
+/// equivalent). Then, use [`Radio::into_receiver`] or [`Radio::into_transmitter`] to
+/// convert between both freely and safely.
 ///
-/// To disable the radio peripheral, either let the [`Radio`] struct go out of scope,
-/// drop it manually, or just call [`Radio::disable()`].
+/// To disable the radio peripheral, call [`Radio::disable()`].
 #[allow(private_interfaces)]
 pub struct Radio<'r, H, M = Receiver>
 where
@@ -126,7 +124,7 @@ where
     /// event to be set at a time.
     ///
     /// Note that when called outside of a context invoked due to an event, this function
-    /// will return [`Event::Ready`], because it has the value 0x0, and therefore there
+    /// will return [`enums::Event::Ready`], because it has the value 0x0, and therefore there
     /// is literally no way to tell that event and no event apart.
     pub fn get_active_event(&self) -> Option<enums::Event> {
         use strum::IntoEnumIterator;
