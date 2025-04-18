@@ -2,7 +2,7 @@
 //! documentation for more details.
 
 /// Radio state; useful for determining whether it's in `Tx`, `Rx`, or `Disabled` mode
-#[derive(Debug)]
+#[derive(Debug, strum::IntoStaticStr)]
 pub enum State {
     /// The radio is disabled
     Disabled = 0,
@@ -26,7 +26,7 @@ pub enum State {
 
 /// Transmission power
 #[allow(missing_docs)] // these are self-explanatory
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, strum::EnumIter)]
 pub enum TxPower {
     Pos4dBm = 0x04,
     _0dBm = 0x00,
@@ -41,7 +41,7 @@ pub enum TxPower {
 /// The different protocols and speeds supported by the radio. The `Nrf` modes are
 /// Nordic's proprietary implementations, while `Ble1Mbit is just` Bluetooth low energy.
 #[allow(missing_docs)] // better described by the enum doc
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, strum::EnumIter)]
 pub enum Mode {
     Nrf1Mbit = 0,
     Nrf2Mbit = 1,
@@ -51,7 +51,7 @@ pub enum Mode {
 
 /// **Basically** simpler representations of in-air physical addresses.
 #[allow(missing_docs)] // better described by the enum doc
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, strum::EnumIter)]
 pub enum LogicalAddress {
     _0 = 0,
     _1 = 1,
@@ -67,7 +67,7 @@ pub enum LogicalAddress {
 ///
 /// A good example is the `END` event that is emitted **when a packet is received,**
 /// and at the end of the transmission of a packet.
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, strum::EnumIter)]
 pub enum Event {
     /// RADIO has ramped up and is ready to be started
     Ready = 0,

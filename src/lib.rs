@@ -8,6 +8,7 @@ pub mod packet;
 
 use core::{marker::PhantomData, mem};
 
+use enums::EventIter;
 // FIXME: fix dependency on singular crate
 use nrf51_hal::pac;
 
@@ -128,20 +129,10 @@ where
     /// will return [`Event::Ready`], because it has the value 0x0, and therefore there
     /// is literally no way to tell that event and no event apart.
     pub fn get_active_event(&self) -> Option<enums::Event> {
-        // TODO: surely this can be rewritten as a macro or something...
-        let events = [
-            enums::Event::Ready,
-            enums::Event::Address,
-            enums::Event::Payload,
-            enums::Event::End,
-            enums::Event::Disabled,
-            enums::Event::DevMatch,
-            enums::Event::DevMiss,
-            enums::Event::RSSIEnd,
-            enums::Event::BCMatch,
-        ];
+        use strum::IntoEnumIterator;
+
         let reg = self.radio.intenset.read().bits();
-        events.into_iter().find(|&e| reg & (0b1 << e as u32) != 0)
+        enums::Event::iter().find(|&e| reg & (0b1 << e as u32) != 0)
     }
 
     /// Sets the radio mode (protocol, tx/rx speed, etc..)
@@ -151,12 +142,11 @@ where
 
     /// Reads the set radio mode from the register.
     pub fn get_mode(&self) -> Option<enums::Mode> {
-        use enums::Mode::*;
+        use strum::IntoEnumIterator;
 
         let mode = self.radio.mode.read().bits();
-        let modes = [Nrf250Kbit, Nrf1Mbit, Nrf2Mbit, Ble1Mbit];
 
-        modes.iter().find(|&&m| (mode ^ m as u32) != 0).copied()
+        enums::Mode::iter().find(|&m| (mode ^ m as u32) != 0)
     }
 
     /// Starts the radio. Depending on the mode, this means either:
@@ -319,13 +309,11 @@ where
 
     /// Reads the enabled Tx address from the register.
     pub fn get_tx_address(&self) -> Option<enums::LogicalAddress> {
-        use enums::LogicalAddress::*;
+        use strum::IntoEnumIterator;
 
         let addr = self.radio.txaddress.read().bits();
-        // FIXME: rewrite this to be auto-generated from the actual enum (see strum)
-        let addresses = [_0, _1, _2, _3, _4, _5, _6, _7];
 
-        addresses.iter().find(|&&a| (addr ^ a as u32) != 0).copied()
+        enums::LogicalAddress::iter().find(|&a| (addr ^ a as u32) != 0)
     }
 
     /// Sets the power (in dB) with which the radio should broadcast. More power = higher
@@ -338,14 +326,11 @@ where
 
     /// Reads the set Tx poewr from the register.
     pub fn get_tx_power(&self) -> Option<enums::TxPower> {
-        use enums::TxPower::*;
+        use strum::IntoEnumIterator;
 
         let power = self.radio.txpower.read().bits();
-        let levels = [
-            Pos4dBm, _0dBm, Neg4dBm, Neg8dBm, Neg12dBm, Neg16dBm, Neg20dBm, Neg30dBm,
-        ];
 
-        levels.iter().find(|&&l| ((l as u32 ^ power) != 0)).copied()
+        enums::TxPower::iter().find(|&l| ((l as u32 ^ power) != 0))
     }
 
     /// Uses the radio to send a payload.
