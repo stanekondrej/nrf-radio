@@ -354,7 +354,7 @@ where
     }
 
     /// Uses the radio to send a payload.
-    pub fn send_payload(&self, payload: &'r [u8]) -> Result<(), &'static str> {
+    pub fn send_payload(&mut self, payload: &'r [u8]) -> Result<(), &'static str> {
         unsafe { self.handler.send_payload(&self.radio, payload) }
     }
 
