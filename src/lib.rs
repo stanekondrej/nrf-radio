@@ -202,13 +202,14 @@ impl<T> crate::Radio<Enabled<T>> {
         self
     }
 
-    /// Enable the given interrupt on the radio
+    /// Enable the given interrupt on the radio. In order to actually receive the interrupt firing,
+    /// it needs to be enabled in the [`NVIC`](nrf51_pac::NVIC) as well.
     ///
     /// # Safety
     ///
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
-    pub unsafe fn enable_interrupt(&self, int: Interrupt) -> &Self {
+    unsafe fn enable_interrupt(&self, int: Interrupt) -> &Self {
         self.radio.intenset.write(|w| unsafe { w.bits(int as u32) });
 
         self
@@ -220,7 +221,7 @@ impl<T> crate::Radio<Enabled<T>> {
     ///
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
-    pub unsafe fn clear_interrupt(&self, int: Interrupt) -> &Self {
+    unsafe fn clear_interrupt(&self, int: Interrupt) -> &Self {
         self.radio.intenclr.write(|w| unsafe { w.bits(int as u32) });
 
         self
