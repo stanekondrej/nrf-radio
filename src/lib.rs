@@ -148,6 +148,34 @@ pub use nrf51_pac::radio::mode::MODE_A as Mode;
 
 pub use nrf51_pac::radio::pcnf1::ENDIAN_A as Endianness;
 
+/// Interrupts that can be invoked by the radio
+#[repr(u32)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub enum Interrupt {
+    /// RADIO has ramped up and is ready to be started
+    Ready = 1 << 0,
+    /// Address sent or received
+    Address = 1 << 2,
+    /// Packet payload sent or received
+    Payload = 1 << 3,
+    /// Packet sent or received
+    End = 1 << 4,
+    /// RADIO has been disabled
+    Disabled = 1 << 5,
+    /// A device address match occurred on the last received packet
+    DevMatch = 1 << 6,
+    /// No device address match occurred on the last received packet
+    DevMiss = 1 << 7,
+    /// Sampling of receive signal strength complete. A new RSSI sample is ready for readout from
+    /// the RSSISAMPLE register
+    RSSIEnd = 1 << 8,
+    /// Bit counter reached bit count value specified in the BCC register
+    BCMatch = 1 << 9,
+}
+
+/// A value that can be XOR'ed in a certain way in order to get more information
+pub type XORMask = u32;
+
 impl<T> crate::Radio<Enabled<T>> {
     impl_disable!();
 
@@ -170,6 +198,35 @@ impl<T> crate::Radio<Enabled<T>> {
         self.radio.pcnf1.write(|w| w.endian().variant(endian));
 
         self
+    }
+
+    /// Enable the given interrupt on the radio
+    ///
+    /// # Safety
+    ///
+    /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
+    /// provided functions unless absolutely necessary.
+    pub unsafe fn enable_interrupt(&self, int: Interrupt) -> &Self {
+        self.radio.intenset.write(|w| unsafe { w.bits(int as u32) });
+
+        self
+    }
+
+    /// Clear the given interrupt on the radio
+    ///
+    /// # Safety
+    ///
+    /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
+    /// provided functions unless absolutely necessary.
+    pub unsafe fn clear_interrupt(&self, int: Interrupt) -> &Self {
+        self.radio.intenclr.write(|w| unsafe { w.bits(int as u32) });
+
+        self
+    }
+
+    /// Returns a mask on which you can try bit ANDing to check the raised interrupts
+    pub fn read_interrupts(&self) -> XORMask {
+        self.radio.intenset.read().bits()
     }
 }
 
