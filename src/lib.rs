@@ -34,14 +34,9 @@ pub enum Error {
 /// Result type returned by functions
 pub type Result<T> = core::result::Result<T, Error>;
 
-#[cfg(feature = "nrf51")]
-#[allow(clippy::upper_case_acronyms)]
-type RADIO = nrf51_pac::RADIO;
-
 /// The main RADIO abstraction
 pub struct Radio<T> {
-    #[cfg(feature = "nrf51")]
-    radio: RADIO,
+    radio: nrf51_pac::RADIO,
     _marker: PhantomData<T>,
 }
 
@@ -67,7 +62,7 @@ macro_rules! convert_radio {
 
 impl crate::Radio<()> {
     /// Constructs a new [`crate::Radio`], setting the radio state to disabled
-    pub fn new(radio: RADIO) -> crate::Radio<Disabled> {
+    pub fn new(radio: nrf51_pac::RADIO) -> crate::Radio<Disabled> {
         radio.tasks_disable.write(|w| unsafe { w.bits(1) });
 
         let radio = convert_radio!(radio, Disabled);
@@ -149,9 +144,9 @@ impl core::convert::TryFrom<u32> for Frequency {
     }
 }
 
-// FIXME: use a custom struct for portability
-#[cfg(feature = "nrf51")]
 pub use nrf51_pac::radio::mode::MODE_A as Mode;
+
+pub use nrf51_pac::radio::pcnf1::ENDIAN_A as Endianness;
 
 impl<T> crate::Radio<Enabled<T>> {
     impl_disable!();
@@ -169,10 +164,15 @@ impl<T> crate::Radio<Enabled<T>> {
 
         self
     }
+
+    /// Set the order of bits of the S0, LENGTH, S1, and PAYLOAD fields.
+    pub fn set_endianness(&self, endian: Endianness) -> &Self {
+        self.radio.pcnf1.write(|w| w.endian().variant(endian));
+
+        self
+    }
 }
 
-// FIXME: use a custom struct for portability
-#[cfg(feature = "nrf51")]
 pub use nrf51_pac::radio::txpower::TXPOWER_A as TxPower;
 
 /// Logical address. Can be used for reception or transmission
@@ -224,8 +224,6 @@ impl crate::Radio<Enabled<Receiver>> {
     }
 }
 
-// FIXME: use a custom struct for portability
-#[cfg(feature = "nrf51")]
 pub use nrf51_pac::radio::state::STATE_A as State;
 
 impl<T> crate::Radio<T> {
