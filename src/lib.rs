@@ -176,6 +176,8 @@ pub enum Interrupt {
 /// A value that can be XOR'ed in a certain way in order to get more information
 pub type XORMask = u32;
 
+// TODO: some of these functions should maybe be moved to the `crate::Radio<T>` impl, as they aren't
+// specific to the enabled state
 impl<T> crate::Radio<Enabled<T>> {
     impl_disable!();
 
@@ -227,6 +229,22 @@ impl<T> crate::Radio<Enabled<T>> {
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
     pub fn read_interrupts(&self) -> XORMask {
         self.radio.intenset.read().bits()
+    }
+
+    /// Set the pointer to a packet which should be sent, or set the pointer to a packet buffer to
+    /// which a received packet should be written
+    ///
+    /// # Safety
+    ///
+    /// The pointee MUST be a buffer or otherwise writable memory location.
+    ///
+    /// The pointer MUST be aligned and MUST NOT be dangling, otherwise **UB will be invoked.**
+    unsafe fn set_packet_ptr<P>(&self, ptr: *mut P) -> &Self {
+        self.radio
+            .packetptr
+            .write(|w| unsafe { w.bits(ptr as u32) });
+
+        self
     }
 }
 
