@@ -86,7 +86,7 @@ macro_rules! impl_into_rx {
             self.wait_for_state(State::DISABLED);
 
             self.radio.tasks_rxen.write(|w| unsafe { w.bits(1) });
-            self.wait_for_state(State::RX);
+            self.wait_for_state(State::RX_IDLE);
 
             $crate::Radio {
                 radio: self.radio,
@@ -105,7 +105,7 @@ macro_rules! impl_into_tx {
             self.wait_for_state(State::DISABLED);
 
             self.radio.tasks_txen.write(|w| unsafe { w.bits(1) });
-            self.wait_for_state(State::TX);
+            self.wait_for_state(State::TX_IDLE);
 
             crate::Radio {
                 radio: self.radio,
@@ -157,13 +157,17 @@ impl<T> crate::Radio<Enabled<T>> {
     impl_disable!();
 
     /// Set the frequency on which the radio operates
-    pub fn set_frequency(&self, freq: Frequency) {
+    pub fn set_frequency(&self, freq: Frequency) -> &Self {
         self.radio.frequency.write(|w| unsafe { w.bits(freq.0) });
+
+        self
     }
 
     /// Sets the mode for the radio
-    pub fn set_mode(&self, mode: Mode) {
+    pub fn set_mode(&self, mode: Mode) -> &Self {
         self.radio.mode.write(|w| w.mode().variant(mode));
+
+        self
     }
 }
 
@@ -190,15 +194,19 @@ impl crate::Radio<Enabled<Transmitter>> {
     impl_into_rx!();
 
     /// Set the transmission power
-    pub fn set_tx_power(&self, tx_power: TxPower) {
+    pub fn set_tx_power(&self, tx_power: TxPower) -> &Self {
         self.radio.txpower.write(|w| w.txpower().variant(tx_power));
+
+        self
     }
 
     /// Sets the logical address to transmit from
-    pub fn set_tx_address(&self, address: Address) {
+    pub fn set_tx_address(&self, address: Address) -> &Self {
         self.radio
             .txaddress
             .write(|w| unsafe { w.bits(address as u32) });
+
+        self
     }
 }
 
@@ -206,11 +214,13 @@ impl crate::Radio<Enabled<Receiver>> {
     impl_into_tx!();
 
     /// Sets the logical addresses on which the radio should listen for packets
-    pub fn set_rx_addresses(&self, addresses: &[Address]) {
+    pub fn set_rx_addresses(&self, addresses: &[Address]) -> &Self {
         // calculate the resulting register value so that only one write is needed
         let a = addresses.iter().fold(0, |acc, x| acc | *x as u32);
 
         self.radio.rxaddresses.write(|w| unsafe { w.bits(a) });
+
+        self
     }
 }
 
