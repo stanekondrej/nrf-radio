@@ -188,6 +188,14 @@ impl<T> crate::Radio<Enabled<T>> {
         self
     }
 
+    /// Get the frequency that the radio is set to
+    pub fn frequency(&self) -> Frequency {
+        let f = self.radio.frequency.read().bits();
+
+        Frequency::try_from(f)
+            .expect("invalid frequency in register; if you see this it is probably a bug")
+    }
+
     /// Sets the mode for the radio
     pub fn set_mode(&self, mode: Mode) -> &Self {
         self.radio.mode.write(|w| w.mode().variant(mode));
@@ -195,11 +203,21 @@ impl<T> crate::Radio<Enabled<T>> {
         self
     }
 
+    /// Get the mode that the radio is set to
+    pub fn mode(&self) -> Mode {
+        self.radio.mode.read().mode().variant()
+    }
+
     /// Set the order of bits of the S0, LENGTH, S1, and PAYLOAD fields.
     pub fn set_endianness(&self, endian: Endianness) -> &Self {
         self.radio.pcnf1.write(|w| w.endian().variant(endian));
 
         self
+    }
+
+    /// Get the endianness that the radio is set to
+    pub fn endianness(&self) -> Endianness {
+        self.radio.pcnf1.read().endian().variant()
     }
 
     /// Enable the given interrupt on the radio. In order to actually receive the interrupt firing,
@@ -278,7 +296,7 @@ pub use nrf51_pac::radio::txpower::TXPOWER_A as TxPower;
 
 /// Logical address. Can be used for reception or transmission
 #[allow(missing_docs)]
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum::FromRepr)]
 #[repr(u32)]
 pub enum Address {
     A = 1 << 0,
@@ -301,6 +319,12 @@ impl crate::Radio<Enabled<Transmitter>> {
         self
     }
 
+    /// Get the transmission power the radio is set to. Returns `None` if the register value is
+    /// invalid
+    pub fn tx_power(&self) -> Option<TxPower> {
+        self.radio.txpower.read().txpower().variant()
+    }
+
     /// Sets the logical address to transmit from
     pub fn set_tx_address(&self, address: Address) -> &Self {
         self.radio
@@ -308,6 +332,13 @@ impl crate::Radio<Enabled<Transmitter>> {
             .write(|w| unsafe { w.bits(address as u32) });
 
         self
+    }
+
+    /// Get the transmission address the radio is currently set to
+    pub fn tx_address(&self) -> Address {
+        let a = self.radio.txaddress.read().txaddress().bits();
+
+        Address::from_repr(a as u32).expect("invalid tx address; if you're seeing this it's a bug")
     }
 }
 
@@ -322,6 +353,11 @@ impl crate::Radio<Enabled<Receiver>> {
         self.radio.rxaddresses.write(|w| unsafe { w.bits(a) });
 
         self
+    }
+
+    /// Get the receive addresses that are enabled on the radio
+    pub fn rx_addresses(&self) -> XORMask {
+        self.radio.rxaddresses.read().bits()
     }
 }
 
