@@ -209,22 +209,47 @@ impl<T> crate::Radio<Enabled<T>> {
     ///
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
-    unsafe fn enable_interrupt(&self, int: Interrupt) -> &Self {
+    unsafe fn enable_interrupt(&self, int: Interrupt) {
         self.radio.intenset.write(|w| unsafe { w.bits(int as u32) });
-
-        self
     }
 
-    /// Clear the given interrupt on the radio
+    /// Disable the given interrupt on the radio
     ///
     /// # Safety
     ///
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
-    unsafe fn clear_interrupt(&self, int: Interrupt) -> &Self {
+    unsafe fn disable_interrupt(&self, int: Interrupt) {
         self.radio.intenclr.write(|w| unsafe { w.bits(int as u32) });
+    }
 
-        self
+    /// Clear the interrupt on the given event.
+    ///
+    /// # Safety
+    ///
+    /// This can break the behaviour of the abstraction. Use with caution.
+    unsafe fn clear_interrupt(&self, int: Interrupt) {
+        macro_rules! impl_write {
+            ($( ($variant:path, $reg_name:ident) ),*) => {
+                match int {
+                    $(
+                        $variant => self.radio.$reg_name.write(|w| unsafe { w.bits(0) }),
+                    )*
+                }
+            };
+        }
+
+        impl_write!(
+            (Interrupt::Ready, events_ready),
+            (Interrupt::Address, events_address),
+            (Interrupt::Payload, events_payload),
+            (Interrupt::End, events_end),
+            (Interrupt::Disabled, events_disabled),
+            (Interrupt::DevMatch, events_devmatch),
+            (Interrupt::DevMiss, events_devmiss),
+            (Interrupt::RSSIEnd, events_rssiend),
+            (Interrupt::BCMatch, events_bcmatch)
+        );
     }
 
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
