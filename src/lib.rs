@@ -129,20 +129,35 @@ impl crate::Radio<Disabled> {
     impl_into_tx!();
 }
 
-/// The frequency on which the radio operates in MHz. (For example, 2400 means 2,4 GHz here)
+/// The offset (in MHz) from which the frequency is calculated
+pub const FREQUENCY_OFFSET: u32 = 2400;
+
+/// The frequency, specified as `2400 MHz + f [MHz]`
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frequency(u32);
 
-impl core::convert::TryFrom<u32> for Frequency {
-    type Error = crate::Error;
-
-    fn try_from(value: u32) -> core::result::Result<Self, Self::Error> {
-        if !(2400..=2500).contains(&value) {
-            return Err(crate::Error::ValueOutOfBounds);
+impl Frequency {
+    fn from_reg_value(reg_value: u32) -> Option<Self> {
+        match reg_value {
+            0..=100 => Some(Self(reg_value)),
+            _ => None,
         }
+    }
 
-        Ok(Self(value - 2400))
+    /// Validates that the frequency is in range, returning `None` if not
+    pub fn from_mhz(mhz: u32) -> Option<Self> {
+        let t = mhz - FREQUENCY_OFFSET;
+
+        match t {
+            0..=100 => Some(Self(t)),
+            _ => None,
+        }
+    }
+
+    /// Convert the inner frequency representation to MHz
+    pub fn as_mhz(&self) -> u32 {
+        self.0 + FREQUENCY_OFFSET
     }
 }
 
@@ -195,7 +210,9 @@ impl<T> crate::Radio<Enabled<T>> {
     pub fn frequency(&self) -> Frequency {
         let f = self.radio.frequency.read().bits();
 
-        Frequency::try_from(f)
+        #[cfg(feature = "defmt")]
+        defmt::println!("{}", f);
+        Frequency::from_reg_value(f)
             .expect("invalid frequency in register; if you see this it is probably a bug")
     }
 
