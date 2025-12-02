@@ -17,6 +17,7 @@ use core::marker::PhantomData;
 
 /// The error type of the library
 #[derive(PartialEq, Debug, thiserror::Error)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     /// The radio is in an unknown state. Tread lightly - you are on very thin ice.
     #[error("the radio is in an unknown state")]
@@ -130,6 +131,7 @@ impl crate::Radio<Disabled> {
 
 /// The frequency on which the radio operates in MHz. (For example, 2400 means 2,4 GHz here)
 #[derive(Copy, Clone, Eq, PartialEq, PartialOrd, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frequency(u32);
 
 impl core::convert::TryFrom<u32> for Frequency {
@@ -151,6 +153,7 @@ pub use nrf51_pac::radio::pcnf1::ENDIAN_A as Endianness;
 /// Interrupts that can be invoked by the radio
 #[repr(u32)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Interrupt {
     /// RADIO has ramped up and is ready to be started
     Ready = 1 << 0,
@@ -297,6 +300,7 @@ pub use nrf51_pac::radio::txpower::TXPOWER_A as TxPower;
 /// Logical address. Can be used for reception or transmission
 #[allow(missing_docs)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum::FromRepr)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u32)]
 pub enum Address {
     A = 1 << 0,
