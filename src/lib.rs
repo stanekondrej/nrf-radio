@@ -174,7 +174,7 @@ pub enum Interrupt {
 }
 
 /// A value that can be XOR'ed in a certain way in order to get more information
-pub type XORMask = u32;
+pub type BitMask = u32;
 
 // TODO: some of these functions should maybe be moved to the `crate::Radio<T>` impl, as they aren't
 // specific to the enabled state
@@ -271,7 +271,7 @@ impl<T> crate::Radio<Enabled<T>> {
     }
 
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
-    pub fn read_interrupts(&self) -> XORMask {
+    pub fn read_interrupts(&self) -> BitMask {
         self.radio.intenset.read().bits()
     }
 
@@ -334,6 +334,13 @@ impl crate::Radio<Enabled<Transmitter>> {
         self
     }
 
+    /// Disable all addresses for sending
+    pub fn disable_all_tx_addresses(&self) -> &Self {
+        self.radio.txaddress.write(|w| unsafe { w.bits(0) });
+
+        self
+    }
+
     /// Get the transmission address the radio is currently set to
     pub fn tx_address(&self) -> Address {
         let a = self.radio.txaddress.read().txaddress().bits();
@@ -345,18 +352,75 @@ impl crate::Radio<Enabled<Transmitter>> {
 impl crate::Radio<Enabled<Receiver>> {
     impl_into_tx!();
 
-    /// Sets the logical addresses on which the radio should listen for packets
-    pub fn set_rx_addresses(&self, addresses: &[Address]) -> &Self {
-        // calculate the resulting register value so that only one write is needed
-        let a = addresses.iter().fold(0, |acc, x| acc | *x as u32);
+    /// Enable a logical address for receiving. Multiple can be enabled at once by making use of
+    /// [`Self::enable_rx_addresses`], which acts as a replacement for bitwise OR.
+    pub fn enable_rx_address(&self, address: Address) -> &Self {
+        self.radio.rxaddresses.modify(|r, w| {
+            let e = r.bits();
+            let mask = address as u32;
+            unsafe { w.bits(e | mask) }
+        });
 
-        self.radio.rxaddresses.write(|w| unsafe { w.bits(a) });
+        self
+    }
+
+    /// Disable a logical address for receiving. Multiple can be disabled at once by making use of
+    /// [`Self::disable_rx_addresses`].
+    pub fn disable_rx_address(&self, address: Address) -> &Self {
+        self.radio.rxaddresses.modify(|r, w| {
+            let e = r.bits();
+            let mask = !(address as u32);
+
+            unsafe { w.bits(e & mask) }
+        });
+
+        self
+    }
+
+    /// Sets the logical addresses on which the radio should listen for packets
+    pub fn enable_rx_addresses(&self, addresses: &[Address]) -> &Self {
+        if addresses.is_empty() {
+            return self;
+        }
+
+        // calculate the resulting register value so that only one write is needed
+        let mask = addresses.iter().fold(0_u32, |acc, x| acc | *x as u32);
+
+        self.radio
+            .rxaddresses
+            .modify(|r, w| unsafe { w.bits(r.bits() | mask) });
+
+        self
+    }
+
+    /// Unsets the logical addresses on which the radio should listen for packets
+    pub fn disable_rx_addresses(&self, addresses: &[Address]) -> &Self {
+        if addresses.is_empty() {
+            return self;
+        }
+
+        // calculate the resulting register value so that only one write is needed
+        let mask = addresses.iter().fold(0_u32, |acc, x| acc | *x as u32);
+
+        self.radio.rxaddresses.modify(|r, w| {
+            let orig = r.bits();
+            let mask = orig & !(mask);
+
+            unsafe { w.bits(mask) }
+        });
+
+        self
+    }
+
+    /// Disable all addresses for receiving
+    pub fn disable_all_rx_addresses(&self) -> &Self {
+        self.radio.rxaddresses.write(|w| unsafe { w.bits(0) });
 
         self
     }
 
     /// Get the receive addresses that are enabled on the radio
-    pub fn rx_addresses(&self) -> XORMask {
+    pub fn rx_addresses(&self) -> BitMask {
         self.radio.rxaddresses.read().bits()
     }
 }
