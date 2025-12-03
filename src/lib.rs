@@ -13,6 +13,8 @@
 //! system would be very complicated, so just blocking while the transition is en-course is
 //! something that would probably save me from shooting myself in the foot)
 
+pub mod packet;
+
 use core::marker::PhantomData;
 
 /// The error type of the library
@@ -228,7 +230,7 @@ impl<T> crate::Radio<Enabled<T>> {
         self.radio.mode.read().mode().variant()
     }
 
-    /// Set the order of bits of the S0, LENGTH, S1, and PAYLOAD fields.
+    /// Set the order of bits of the `S0`, `LENGTH`, `S1`, and `PAYLOAD` fields.
     pub fn set_endianness(&self, endian: Endianness) -> &Self {
         self.radio.pcnf1.write(|w| w.endian().variant(endian));
 
@@ -444,6 +446,44 @@ impl crate::Radio<Enabled<Receiver>> {
     pub fn rx_addresses(&self) -> BitMask {
         self.radio.rxaddresses.read().bits()
     }
+
+    /// Receives a packet, waiting for `cycles` CPU cycles until returning [`crate::Error::TimedOut`]
+    pub fn receive_packet_with_timeout(&self, cycles: u32) -> crate::Result<packet::Packet> {
+        let mut p = packet::Packet::new_zeroed();
+
+        let lf_len = self.radio.pcnf0.read().lflen().bits();
+        let lf_len = packet::LengthFieldLength::from_bits(lf_len.into())
+            .expect("invalid length field length");
+
+        let s0_len = self.radio.pcnf0.read().s0len().bit() as u32 * 8;
+        let s0_len = packet::S0FieldLength::from_bits(s0_len).expect("invalid s0 field length");
+
+        let s1_len = self.radio.pcnf0.read().s1len().bits();
+        let s1_len =
+            packet::S1FieldLength::from_bits(s1_len.into()).expect("invalid s1 field length");
+
+        p.set_lf_len(lf_len).set_s0_len(s0_len).set_s1_len(s1_len);
+
+        let buf_ptr = p.buf_mut_ptr() as u32;
+        self.radio.packetptr.write(|w| unsafe { w.bits(buf_ptr) });
+
+        self.radio.tasks_start.write(|w| unsafe { w.bits(1) });
+        self.wait_for_state_cycles(State::RX_IDLE, cycles)?;
+
+        Ok(p)
+    }
+
+    /// Receives a packet, waiting indefinitely if needed
+    pub fn receive_packet(&self) -> crate::Result<packet::Packet> {
+        loop {
+            let r = self.receive_packet_with_timeout(u32::MAX);
+            if Err(crate::Error::TimedOut) == r {
+                continue;
+            }
+
+            r?;
+        }
+    }
 }
 
 pub use nrf51_pac::radio::state::STATE_A as State;
@@ -464,7 +504,7 @@ impl<T> crate::Radio<T> {
     /// # Safety
     ///
     /// This function panics if the radio is in an invalid state
-    pub fn wait_for_state_cycles(&self, state: State, cycles: usize) -> crate::Result<()> {
+    pub fn wait_for_state_cycles(&self, state: State, cycles: u32) -> crate::Result<()> {
         for _ in 0..cycles {
             if self.get_state().expect("The radio is in an invalid state") == state {
                 return Ok(());
@@ -480,7 +520,7 @@ impl<T> crate::Radio<T> {
     ///
     /// This function panics if the radio is in an invalid state
     pub fn wait_for_state(&self, state: State) {
-        while self.wait_for_state_cycles(state, usize::MAX) == Err(crate::Error::TimedOut) {
+        while self.wait_for_state_cycles(state, u32::MAX) == Err(crate::Error::TimedOut) {
             core::hint::spin_loop();
         }
     }
