@@ -72,11 +72,32 @@ macro_rules! convert_radio {
 
 impl crate::Radio<()> {
     /// Constructs a new [`crate::Radio`], setting the radio state to disabled
+    ///
+    /// If are constructing [`crate::Radio`] for the first time in your program, **you most
+    /// definitely want to use [`Self::new_zeroed`] instead.** This function will not overwrite any
+    /// config registers, so things will look weird if you haven't written to said registers before
+    /// this function.
+    ///
+    /// You will probably want to use this function if you've already constructed [`crate::Radio`]
+    /// before, but need to construct a new struct for some reason.
     pub fn new(radio: nrf51_pac::RADIO) -> crate::Radio<Disabled> {
         reg_access::disable(&radio);
 
         let radio = convert_radio!(radio, Disabled);
         radio.wait_for_state(State::DISABLED);
+
+        radio
+    }
+
+    /// Like [`Self::new`], but sets many registers to zero, so that packets don't exhibit possibly
+    /// unexpected behaviour
+    pub fn new_zeroed(radio: nrf51_pac::RADIO) -> crate::Radio<Disabled> {
+        let radio = Self::new(radio);
+
+        let r = &radio.radio;
+
+        reg_access::write_tx_address(r, 0);
+        reg_access::write_rx_address(r, 0);
 
         radio
     }
@@ -373,7 +394,7 @@ impl crate::Radio<Enabled<Transmitter>> {
 
     /// Set the transmission power
     pub fn set_tx_power(&self, tx_power: TxPower) -> &Self {
-        reg_access::set_tx_power(&self.radio, tx_power);
+        reg_access::write_tx_power(&self.radio, tx_power);
 
         self
     }
@@ -386,14 +407,14 @@ impl crate::Radio<Enabled<Transmitter>> {
 
     /// Sets the logical address to transmit from
     pub fn set_tx_address(&self, address: Address) -> &Self {
-        reg_access::set_tx_address(&self.radio, address as u32);
+        reg_access::write_tx_address(&self.radio, address as u32);
 
         self
     }
 
     /// Disable all addresses for sending
     pub fn disable_all_tx_addresses(&self) -> &Self {
-        reg_access::set_tx_address(&self.radio, 0);
+        reg_access::write_tx_address(&self.radio, 0);
 
         self
     }
@@ -412,10 +433,10 @@ impl crate::Radio<Enabled<Receiver>> {
     /// Enable a logical address for receiving. Multiple can be enabled at once by making use of
     /// [`Self::enable_rx_addresses`], which acts as a replacement for bitwise OR.
     pub fn enable_rx_address(&self, address: Address) -> &Self {
-        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let reg_value = reg_access::read_rx_address(&self.radio);
         let new_reg_value = reg_value | address as u8;
 
-        reg_access::write_rx_addresses(&self.radio, new_reg_value);
+        reg_access::write_rx_address(&self.radio, new_reg_value);
 
         self
     }
@@ -423,11 +444,11 @@ impl crate::Radio<Enabled<Receiver>> {
     /// Disable a logical address for receiving. Multiple can be disabled at once by making use of
     /// [`Self::disable_rx_addresses`].
     pub fn disable_rx_address(&self, address: Address) -> &Self {
-        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let reg_value = reg_access::read_rx_address(&self.radio);
         let mask = !(address as u8);
         let new_reg_value = reg_value & mask;
 
-        reg_access::write_rx_addresses(&self.radio, new_reg_value);
+        reg_access::write_rx_address(&self.radio, new_reg_value);
 
         self
     }
@@ -441,10 +462,10 @@ impl crate::Radio<Enabled<Receiver>> {
         // calculate the resulting register value so that only one write is needed
         let mask = addresses.iter().fold(0, |acc, x| acc | *x as u8);
 
-        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let reg_value = reg_access::read_rx_address(&self.radio);
         let new_reg_value = reg_value | mask;
 
-        reg_access::write_rx_addresses(&self.radio, new_reg_value);
+        reg_access::write_rx_address(&self.radio, new_reg_value);
 
         self
     }
@@ -458,23 +479,23 @@ impl crate::Radio<Enabled<Receiver>> {
         // calculate the resulting register value so that only one write is needed
         let mask = addresses.iter().fold(0, |acc, x| acc | *x as u8);
 
-        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let reg_value = reg_access::read_rx_address(&self.radio);
         let new_reg_value = reg_value & !(mask);
-        reg_access::write_rx_addresses(&self.radio, new_reg_value);
+        reg_access::write_rx_address(&self.radio, new_reg_value);
 
         self
     }
 
     /// Disable all addresses for receiving
     pub fn disable_all_rx_addresses(&self) -> &Self {
-        reg_access::clear_rx_addresses(&self.radio);
+        reg_access::write_rx_address(&self.radio, 0);
 
         self
     }
 
     /// Get the receive addresses that are enabled on the radio
     pub fn rx_addresses(&self) -> BitMask<u8> {
-        reg_access::read_rx_addresses(&self.radio)
+        reg_access::read_rx_address(&self.radio)
     }
 
     /// Receives a packet, waiting for `cycles` CPU cycles until returning [`crate::Error::TimedOut`]

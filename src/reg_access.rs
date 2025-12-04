@@ -63,7 +63,7 @@ pub(crate) fn read_tx_power(radio: &RADIO) -> Option<crate::TxPower> {
     radio.txpower.read().txpower().variant()
 }
 
-pub(crate) fn set_tx_power(radio: &RADIO, tx_power: crate::TxPower) {
+pub(crate) fn write_tx_power(radio: &RADIO, tx_power: crate::TxPower) {
     radio.txpower.write(|w| w.txpower().variant(tx_power));
 }
 
@@ -71,11 +71,11 @@ pub(crate) fn read_tx_address(radio: &RADIO) -> crate::BitMask<u8> {
     radio.txaddress.read().txaddress().bits()
 }
 
-pub(crate) fn set_tx_address(radio: &RADIO, addr: u32) {
+pub(crate) fn write_tx_address(radio: &RADIO, addr: u32) {
     radio.txaddress.write(|w| unsafe { w.bits(addr) });
 }
 
-pub(crate) fn read_rx_addresses(radio: &RADIO) -> BitMask<u8> {
+pub(crate) fn read_rx_address(radio: &RADIO) -> BitMask<u8> {
     radio
         .rxaddresses
         .read()
@@ -84,12 +84,8 @@ pub(crate) fn read_rx_addresses(radio: &RADIO) -> BitMask<u8> {
         .expect("unable to fit a u32 into a u8") // this should never fail
 }
 
-pub(crate) fn write_rx_addresses(radio: &RADIO, mask: BitMask<u8>) {
-    radio.rxaddresses.write(|w| unsafe { w.bits(mask.into()) });
-}
-
-pub(crate) fn clear_rx_addresses(radio: &RADIO) {
-    radio.rxaddresses.write(|w| unsafe { w.bits(0) });
+pub(crate) fn write_rx_address(radio: &RADIO, addr: u8) {
+    radio.txaddress.write(|w| unsafe { w.bits(addr.into()) });
 }
 
 pub(crate) fn read_lf_len(radio: &RADIO) -> LengthFieldLength {
