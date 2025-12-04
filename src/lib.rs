@@ -270,56 +270,6 @@ impl<T> crate::Radio<Enabled<T>> {
         reg_access::get_endianness(&self.radio)
     }
 
-    /// Enable the given interrupt on the radio. In order to actually receive the interrupt firing,
-    /// it needs to be enabled in the [`NVIC`](nrf51_pac::NVIC) as well.
-    ///
-    /// # Safety
-    ///
-    /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
-    /// provided functions unless absolutely necessary.
-    unsafe fn enable_interrupt(&self, int: Interrupt) {
-        reg_access::enable_interrupt(&self.radio, int);
-    }
-
-    /// Disable the given interrupt on the radio
-    ///
-    /// # Safety
-    ///
-    /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
-    /// provided functions unless absolutely necessary.
-    unsafe fn disable_interrupt(&self, int: Interrupt) {
-        reg_access::disable_interrupt(&self.radio, int);
-    }
-
-    /// Clear the interrupt on the given event.
-    ///
-    /// # Safety
-    ///
-    /// This can break the behaviour of the abstraction. Use with caution.
-    unsafe fn clear_interrupt(&self, int: Interrupt) {
-        macro_rules! impl_write {
-            ($( ($variant:path, $reg_name:ident) ),*) => {
-                match int {
-                    $(
-                        $variant => self.radio.$reg_name.write(|w| unsafe { w.bits(0) }),
-                    )*
-                }
-            };
-        }
-
-        impl_write!(
-            (Interrupt::Ready, events_ready),
-            (Interrupt::Address, events_address),
-            (Interrupt::Payload, events_payload),
-            (Interrupt::End, events_end),
-            (Interrupt::Disabled, events_disabled),
-            (Interrupt::DevMatch, events_devmatch),
-            (Interrupt::DevMiss, events_devmiss),
-            (Interrupt::RSSIEnd, events_rssiend),
-            (Interrupt::BCMatch, events_bcmatch)
-        );
-    }
-
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
     pub fn read_interrupts(&self) -> BitMask<u32> {
         reg_access::read_interrupts(&self.radio)
