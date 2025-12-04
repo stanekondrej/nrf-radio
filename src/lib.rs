@@ -5,15 +5,22 @@
 
 //! An abstraction over the nRFxxxx SoCs' radio peripheral
 //!
-//! This library tries not to be opinionated, but in cases where a choice has to be made between
-//! a theoretically attainable performance improvement and safety, I usually chose safety.
+//! This library tries not to be opinionated where it doesn't have to be, but in cases where a
+//! choice has to be made between a theoretically attainable performance improvement and safety, I
+//! usually chose safety.
 //!
 //! (To give a concrete example of this, the radio mode conversion functions block the thread while
 //! they wait for the radio to switch tx/rx modes. Expressing the in-the-middle state in the type
 //! system would be very complicated, so just blocking while the transition is en-course is
 //! something that would probably save me from shooting myself in the foot)
+//!
+//! # Performance
+//!
+//! Speed isn't the main focus of this interface - interrupts generally aren't used; everything is
+//! awaited in a spinlock.
 
 pub mod packet;
+mod reg_access;
 
 use core::marker::PhantomData;
 
@@ -66,7 +73,7 @@ macro_rules! convert_radio {
 impl crate::Radio<()> {
     /// Constructs a new [`crate::Radio`], setting the radio state to disabled
     pub fn new(radio: nrf51_pac::RADIO) -> crate::Radio<Disabled> {
-        radio.tasks_disable.write(|w| unsafe { w.bits(1) });
+        reg_access::disable(&radio);
 
         let radio = convert_radio!(radio, Disabled);
         radio.wait_for_state(State::DISABLED);
@@ -80,10 +87,10 @@ macro_rules! impl_into_rx {
     () => {
         /// Switch the radio into receiver mode
         pub fn into_receiver(self) -> $crate::Radio<Enabled<Receiver>> {
-            self.radio.tasks_disable.write(|w| unsafe { w.bits(1) });
+            reg_access::disable(&self.radio);
             self.wait_for_state(State::DISABLED);
 
-            self.radio.tasks_rxen.write(|w| unsafe { w.bits(1) });
+            reg_access::enable_rx(&self.radio);
             self.wait_for_state(State::RX_IDLE);
 
             $crate::Radio {
@@ -99,10 +106,10 @@ macro_rules! impl_into_tx {
     () => {
         /// Switch the radio into transmitter mode
         pub fn into_transmitter(self) -> crate::Radio<Enabled<Transmitter>> {
-            self.radio.tasks_disable.write(|w| unsafe { w.bits(1) });
+            reg_access::disable(&self.radio);
             self.wait_for_state(State::DISABLED);
 
-            self.radio.tasks_txen.write(|w| unsafe { w.bits(1) });
+            reg_access::enable_tx(&self.radio);
             self.wait_for_state(State::TX_IDLE);
 
             crate::Radio {
@@ -118,7 +125,7 @@ macro_rules! impl_disable {
     () => {
         /// Disable the radio
         pub fn disable(self) -> crate::Radio<Disabled> {
-            self.radio.tasks_disable.write(|w| unsafe { w.bits(1) });
+            reg_access::disable(&self.radio);
             self.wait_for_state(State::DISABLED);
 
             convert_radio!(self.radio, Disabled)
@@ -194,7 +201,7 @@ pub enum Interrupt {
 }
 
 /// A value that can be XOR'ed in a certain way in order to get more information
-pub type BitMask = u32;
+pub type BitMask<T> = T;
 
 // TODO: some of these functions should maybe be moved to the `crate::Radio<T>` impl, as they aren't
 // specific to the enabled state
@@ -203,14 +210,14 @@ impl<T> crate::Radio<Enabled<T>> {
 
     /// Set the frequency on which the radio operates
     pub fn set_frequency(&self, freq: Frequency) -> &Self {
-        self.radio.frequency.write(|w| unsafe { w.bits(freq.0) });
+        reg_access::write_frequency(&self.radio, freq.0);
 
         self
     }
 
     /// Get the frequency that the radio is set to
     pub fn frequency(&self) -> Frequency {
-        let f = self.radio.frequency.read().bits();
+        let f = reg_access::read_frequency(&self.radio);
 
         #[cfg(feature = "defmt")]
         defmt::println!("{}", f);
@@ -220,26 +227,26 @@ impl<T> crate::Radio<Enabled<T>> {
 
     /// Sets the mode for the radio
     pub fn set_mode(&self, mode: Mode) -> &Self {
-        self.radio.mode.write(|w| w.mode().variant(mode));
+        reg_access::write_mode(&self.radio, mode);
 
         self
     }
 
     /// Get the mode that the radio is set to
     pub fn mode(&self) -> Mode {
-        self.radio.mode.read().mode().variant()
+        reg_access::read_mode(&self.radio)
     }
 
     /// Set the order of bits of the `S0`, `LENGTH`, `S1`, and `PAYLOAD` fields.
     pub fn set_endianness(&self, endian: Endianness) -> &Self {
-        self.radio.pcnf1.write(|w| w.endian().variant(endian));
+        reg_access::set_endianness(&self.radio, endian);
 
         self
     }
 
     /// Get the endianness that the radio is set to
     pub fn endianness(&self) -> Endianness {
-        self.radio.pcnf1.read().endian().variant()
+        reg_access::get_endianness(&self.radio)
     }
 
     /// Enable the given interrupt on the radio. In order to actually receive the interrupt firing,
@@ -250,7 +257,7 @@ impl<T> crate::Radio<Enabled<T>> {
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
     unsafe fn enable_interrupt(&self, int: Interrupt) {
-        self.radio.intenset.write(|w| unsafe { w.bits(int as u32) });
+        reg_access::enable_interrupt(&self.radio, int);
     }
 
     /// Disable the given interrupt on the radio
@@ -260,7 +267,7 @@ impl<T> crate::Radio<Enabled<T>> {
     /// If used incorrectly, this can break the behaviour of the abstraction. Try to use the
     /// provided functions unless absolutely necessary.
     unsafe fn disable_interrupt(&self, int: Interrupt) {
-        self.radio.intenclr.write(|w| unsafe { w.bits(int as u32) });
+        reg_access::disable_interrupt(&self.radio, int);
     }
 
     /// Clear the interrupt on the given event.
@@ -293,8 +300,8 @@ impl<T> crate::Radio<Enabled<T>> {
     }
 
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
-    pub fn read_interrupts(&self) -> BitMask {
-        self.radio.intenset.read().bits()
+    pub fn read_interrupts(&self) -> BitMask<u32> {
+        reg_access::read_interrupts(&self.radio)
     }
 
     /// Set the pointer to a packet which should be sent, or set the pointer to a packet buffer to
@@ -306,9 +313,7 @@ impl<T> crate::Radio<Enabled<T>> {
     ///
     /// The pointer MUST be aligned and MUST NOT be dangling, otherwise **UB will be invoked.**
     unsafe fn set_packet_ptr<P>(&self, ptr: *mut P) -> &Self {
-        self.radio
-            .packetptr
-            .write(|w| unsafe { w.bits(ptr as u32) });
+        reg_access::set_packet_ptr(&self.radio, ptr);
 
         self
     }
@@ -317,19 +322,50 @@ impl<T> crate::Radio<Enabled<T>> {
 pub use nrf51_pac::radio::txpower::TXPOWER_A as TxPower;
 
 /// Logical address. Can be used for reception or transmission
+///
+/// # Safety
+///
+/// In case it wasn't obvious, it isn't really possible to [`core::mem::transmute`] from the bit
+/// representation of an address to this one. TX and RX logical addresses are represented
+/// differently.
 #[allow(missing_docs)]
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum::FromRepr)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[repr(u32)]
+#[repr(u8)]
 pub enum Address {
-    A = 1 << 0,
-    B = 1 << 1,
-    C = 1 << 2,
-    D = 1 << 3,
-    E = 1 << 4,
-    F = 1 << 5,
-    G = 1 << 6,
-    H = 1 << 7,
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
+    E = 4,
+    F = 5,
+    G = 6,
+    H = 7,
+}
+
+/// Calculates the shift needed to reach the first `true` bit in the bitmask
+fn count_mask_shift(mut mask: BitMask<u32>) -> u8 {
+    let mut index = 0;
+    while (mask & 1) == 0 {
+        mask >>= 1;
+        index += 1;
+    }
+
+    index
+}
+
+impl Address {
+    fn into_rx_address(self) -> u8 {
+        1 << self as u8
+    }
+
+    fn into_tx_address(self) -> u8 {
+        self as u8
+    }
+
+    fn from_tx_address(addr: u8) -> Option<Self> {
+        Self::from_repr(addr)
+    }
 }
 
 impl crate::Radio<Enabled<Transmitter>> {
@@ -337,7 +373,7 @@ impl crate::Radio<Enabled<Transmitter>> {
 
     /// Set the transmission power
     pub fn set_tx_power(&self, tx_power: TxPower) -> &Self {
-        self.radio.txpower.write(|w| w.txpower().variant(tx_power));
+        reg_access::set_tx_power(&self.radio, tx_power);
 
         self
     }
@@ -345,30 +381,28 @@ impl crate::Radio<Enabled<Transmitter>> {
     /// Get the transmission power the radio is set to. Returns `None` if the register value is
     /// invalid
     pub fn tx_power(&self) -> Option<TxPower> {
-        self.radio.txpower.read().txpower().variant()
+        reg_access::read_tx_power(&self.radio)
     }
 
     /// Sets the logical address to transmit from
     pub fn set_tx_address(&self, address: Address) -> &Self {
-        self.radio
-            .txaddress
-            .write(|w| unsafe { w.bits(address as u32) });
+        reg_access::set_tx_address(&self.radio, address as u32);
 
         self
     }
 
     /// Disable all addresses for sending
     pub fn disable_all_tx_addresses(&self) -> &Self {
-        self.radio.txaddress.write(|w| unsafe { w.bits(0) });
+        reg_access::set_tx_address(&self.radio, 0);
 
         self
     }
 
     /// Get the transmission address the radio is currently set to
     pub fn tx_address(&self) -> Address {
-        let a = self.radio.txaddress.read().txaddress().bits();
+        let a = reg_access::read_tx_address(&self.radio);
 
-        Address::from_repr(a as u32).expect("invalid tx address; if you're seeing this it's a bug")
+        Address::from_tx_address(a).expect("invalid tx address; if you're seeing this it's a bug")
     }
 }
 
@@ -378,11 +412,10 @@ impl crate::Radio<Enabled<Receiver>> {
     /// Enable a logical address for receiving. Multiple can be enabled at once by making use of
     /// [`Self::enable_rx_addresses`], which acts as a replacement for bitwise OR.
     pub fn enable_rx_address(&self, address: Address) -> &Self {
-        self.radio.rxaddresses.modify(|r, w| {
-            let e = r.bits();
-            let mask = address as u32;
-            unsafe { w.bits(e | mask) }
-        });
+        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let new_reg_value = reg_value | address as u8;
+
+        reg_access::write_rx_addresses(&self.radio, new_reg_value);
 
         self
     }
@@ -390,12 +423,11 @@ impl crate::Radio<Enabled<Receiver>> {
     /// Disable a logical address for receiving. Multiple can be disabled at once by making use of
     /// [`Self::disable_rx_addresses`].
     pub fn disable_rx_address(&self, address: Address) -> &Self {
-        self.radio.rxaddresses.modify(|r, w| {
-            let e = r.bits();
-            let mask = !(address as u32);
+        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let mask = !(address as u8);
+        let new_reg_value = reg_value & mask;
 
-            unsafe { w.bits(e & mask) }
-        });
+        reg_access::write_rx_addresses(&self.radio, new_reg_value);
 
         self
     }
@@ -407,11 +439,12 @@ impl crate::Radio<Enabled<Receiver>> {
         }
 
         // calculate the resulting register value so that only one write is needed
-        let mask = addresses.iter().fold(0_u32, |acc, x| acc | *x as u32);
+        let mask = addresses.iter().fold(0, |acc, x| acc | *x as u8);
 
-        self.radio
-            .rxaddresses
-            .modify(|r, w| unsafe { w.bits(r.bits() | mask) });
+        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let new_reg_value = reg_value | mask;
+
+        reg_access::write_rx_addresses(&self.radio, new_reg_value);
 
         self
     }
@@ -423,51 +456,41 @@ impl crate::Radio<Enabled<Receiver>> {
         }
 
         // calculate the resulting register value so that only one write is needed
-        let mask = addresses.iter().fold(0_u32, |acc, x| acc | *x as u32);
+        let mask = addresses.iter().fold(0, |acc, x| acc | *x as u8);
 
-        self.radio.rxaddresses.modify(|r, w| {
-            let orig = r.bits();
-            let mask = orig & !(mask);
-
-            unsafe { w.bits(mask) }
-        });
+        let reg_value = reg_access::read_rx_addresses(&self.radio);
+        let new_reg_value = reg_value & !(mask);
+        reg_access::write_rx_addresses(&self.radio, new_reg_value);
 
         self
     }
 
     /// Disable all addresses for receiving
     pub fn disable_all_rx_addresses(&self) -> &Self {
-        self.radio.rxaddresses.write(|w| unsafe { w.bits(0) });
+        reg_access::clear_rx_addresses(&self.radio);
 
         self
     }
 
     /// Get the receive addresses that are enabled on the radio
-    pub fn rx_addresses(&self) -> BitMask {
-        self.radio.rxaddresses.read().bits()
+    pub fn rx_addresses(&self) -> BitMask<u8> {
+        reg_access::read_rx_addresses(&self.radio)
     }
 
     /// Receives a packet, waiting for `cycles` CPU cycles until returning [`crate::Error::TimedOut`]
     pub fn receive_packet_with_timeout(&self, cycles: u32) -> crate::Result<packet::Packet> {
         let mut p = packet::Packet::new_zeroed();
 
-        let lf_len = self.radio.pcnf0.read().lflen().bits();
-        let lf_len = packet::LengthFieldLength::from_bits(lf_len.into())
-            .expect("invalid length field length");
-
-        let s0_len = self.radio.pcnf0.read().s0len().bit() as u32 * 8;
-        let s0_len = packet::S0FieldLength::from_bits(s0_len).expect("invalid s0 field length");
-
-        let s1_len = self.radio.pcnf0.read().s1len().bits();
-        let s1_len =
-            packet::S1FieldLength::from_bits(s1_len.into()).expect("invalid s1 field length");
+        let lf_len = reg_access::read_lf_len(&self.radio);
+        let s0_len = reg_access::read_s0_len(&self.radio);
+        let s1_len = reg_access::read_s1_len(&self.radio);
 
         p.set_lf_len(lf_len).set_s0_len(s0_len).set_s1_len(s1_len);
 
-        let buf_ptr = p.buf_mut_ptr() as u32;
-        self.radio.packetptr.write(|w| unsafe { w.bits(buf_ptr) });
+        let buf_ptr = p.buf_mut_ptr();
+        reg_access::set_packet_ptr(&self.radio, buf_ptr);
 
-        self.radio.tasks_start.write(|w| unsafe { w.bits(1) });
+        reg_access::tasks::start(&self.radio);
         self.wait_for_state_cycles(State::RX_IDLE, cycles)?;
 
         Ok(p)
@@ -491,12 +514,7 @@ pub use nrf51_pac::radio::state::STATE_A as State;
 impl<T> crate::Radio<T> {
     /// Get the state which the radio is currently in
     pub fn get_state(&self) -> crate::Result<State> {
-        self.radio
-            .state
-            .read()
-            .state()
-            .variant()
-            .ok_or(crate::Error::UnknownState)
+        reg_access::get_state(&self.radio).ok_or(crate::Error::UnknownState)
     }
 
     /// Wait until radio goes into state. Break out of the function after `cycles`, returning [`crate::Error::TimedOut`].
