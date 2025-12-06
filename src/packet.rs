@@ -15,11 +15,6 @@ pub type PacketBuffer = [u8; MAX_IN_MEMORY_PACKET_LENGTH];
 
 /// A packet that can be serialized and transmitted over the network, or deserialized into and then
 /// processed on this microcontroller
-///
-/// For transmission, use [`Packet::new`] and then write data to it.
-/// For reception, use [`Packet::new`] and then pass the buffer pointer ([`Packet::buf_ptr`]) to
-/// the [`crate::Radio`]
-// FIXME: the docs here reference functionality not yet implemented
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Packet {
