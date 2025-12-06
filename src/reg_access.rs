@@ -93,9 +93,22 @@ pub(crate) fn read_lf_len(radio: &RADIO) -> LengthFieldLength {
         .expect("invalid LENGTH field length in register")
 }
 
+pub(crate) fn write_lf_len(radio: &RADIO, len: LengthFieldLength) {
+    radio.pcnf0.write(|w| unsafe {
+        w.lflen()
+            .bits(len.inner().try_into().expect("unable to fit u32 into u8"))
+    });
+}
+
 pub(crate) fn read_s0_len(radio: &RADIO) -> S0FieldLength {
     S0FieldLength::from_bits(radio.pcnf0.read().s0len().bit().into())
         .expect("invalid S0 field length in register")
+}
+
+pub(crate) fn write_s0_len(radio: &RADIO, len: S0FieldLength) {
+    radio
+        .pcnf0
+        .write(|w| unsafe { w.s0len().bit(len.inner().try_into().unwrap()) });
 }
 
 pub(crate) fn read_s1_len(radio: &RADIO) -> S1FieldLength {

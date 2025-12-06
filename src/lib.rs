@@ -270,6 +270,25 @@ impl<T> crate::Radio<Enabled<T>> {
         reg_access::get_endianness(&self.radio)
     }
 
+    /// Get the `LENGTH` field length
+    pub fn lf_len(&self) -> LengthFieldLength {
+        reg_access::read_lf_len(&self.radio)
+    }
+
+    pub fn set_lf_len(&self, len: LengthFieldLength) {
+        reg_access::write_lf_len(&self.radio, len);
+    }
+
+    /// Get the `S0` field length
+    pub fn s0_len(&self) -> S0FieldLength {
+        reg_access::read_s0_len(&self.radio)
+    }
+
+    /// Get the `S1` field length
+    pub fn s1_len(&self) -> S1FieldLength {
+        reg_access::read_s1_len(&self.radio)
+    }
+
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts
     pub fn read_interrupts(&self) -> BitMask<u32> {
         reg_access::read_interrupts(&self.radio)
@@ -481,6 +500,8 @@ impl crate::Radio<Enabled<Receiver>> {
 }
 
 pub use nrf51_pac::radio::state::STATE_A as State;
+
+use crate::packet::{LengthFieldLength, S0FieldLength, S1FieldLength};
 
 impl<T> crate::Radio<T> {
     /// Get the state which the radio is currently in
