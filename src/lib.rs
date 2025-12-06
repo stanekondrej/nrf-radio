@@ -275,6 +275,7 @@ impl<T> crate::Radio<Enabled<T>> {
         reg_access::read_lf_len(&self.radio)
     }
 
+    /// Set the `LENGTH` field length
     pub fn set_lf_len(&self, len: LengthFieldLength) {
         reg_access::write_lf_len(&self.radio, len);
     }
@@ -284,9 +285,19 @@ impl<T> crate::Radio<Enabled<T>> {
         reg_access::read_s0_len(&self.radio)
     }
 
+    /// Set the `S0` field length
+    pub fn set_s0_len(&self, len: S0FieldLength) {
+        reg_access::write_s0_len(&self.radio, len);
+    }
+
     /// Get the `S1` field length
     pub fn s1_len(&self) -> S1FieldLength {
         reg_access::read_s1_len(&self.radio)
+    }
+
+    /// Set the `S1` field length
+    pub fn set_s1_len(&self, len: S1FieldLength) {
+        reg_access::write_s1_len(&self.radio, len);
     }
 
     /// Returns a mask on which you can try bit ANDing to check the raised interrupts

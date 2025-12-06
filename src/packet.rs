@@ -4,11 +4,11 @@
 pub const MAX_IN_MEMORY_PACKET_LENGTH: usize = 254;
 
 /// Maximum length of the `LENGTH` field
-pub const MAX_LENGTH_FIELD_BITS: u32 = 16;
+pub const MAX_LENGTH_FIELD_BITS: u8 = 16;
 /// Maximum length of the `S0` field
-pub const MAX_S0_LENGTH_BITS: u32 = 8;
+pub const MAX_S0_LENGTH_BYTES: u8 = 1;
 /// Maximum length of the `S1` field
-pub const MAX_S1_LENGTH_BITS: u32 = 16;
+pub const MAX_S1_LENGTH_BITS: u8 = 16;
 
 /// The buffer that holds a packet
 pub type PacketBuffer = [u8; MAX_IN_MEMORY_PACKET_LENGTH];
@@ -30,28 +30,53 @@ pub struct Packet {
     s1_len: S1FieldLength,
 }
 
-macro_rules! create_field_len_struct {
-    ($name:ident, $upper_limit:ident) => {
-        /// Struct containing the validated length of a field
-        #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
-        #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-        pub struct $name(u32);
+/// See [MAX_LENGTH_FIELD_BITS]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct LengthFieldLength(pub(crate) u8);
 
-        impl $name {
-            /// Convert `len` to this value, checking if `len` is in bounds of the type
-            pub fn from_bits(len: u32) -> Option<Self> {
-                match len > $upper_limit {
-                    true => None,
-                    false => Some(Self(len)),
-                }
-            }
+/// See [MAX_S0_LENGTH_BYTES]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct S0FieldLength(pub(crate) bool);
+
+/// See [MAX_S1_LENGTH_BITS]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct S1FieldLength(pub(crate) u8);
+
+impl LengthFieldLength {
+    /// Convert to this value from number of bits
+    pub fn from_bits(len: u8) -> Option<Self> {
+        if len > MAX_LENGTH_FIELD_BITS {
+            return None;
         }
-    };
+
+        Some(Self(len))
+    }
 }
 
-create_field_len_struct!(LengthFieldLength, MAX_LENGTH_FIELD_BITS);
-create_field_len_struct!(S0FieldLength, MAX_S0_LENGTH_BITS);
-create_field_len_struct!(S1FieldLength, MAX_S1_LENGTH_BITS);
+impl S0FieldLength {
+    /// Convert to this value from number of bytes
+    pub fn from_bytes(len: u8) -> Option<Self> {
+        if len > MAX_S0_LENGTH_BYTES {
+            return None;
+        }
+
+        Some(Self(len != 0))
+    }
+}
+
+impl S1FieldLength {
+    /// Convert to this value from number of bits
+    pub fn from_bits(len: u8) -> Option<Self> {
+        if len > MAX_S1_LENGTH_BITS {
+            return None;
+        }
+
+        Some(Self(len))
+    }
+}
 
 impl Packet {
     /// Constructs a new, zeroed out packet

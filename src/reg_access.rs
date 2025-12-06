@@ -89,31 +89,30 @@ pub(crate) fn write_rx_address(radio: &RADIO, addr: u8) {
 }
 
 pub(crate) fn read_lf_len(radio: &RADIO) -> LengthFieldLength {
-    LengthFieldLength::from_bits(radio.pcnf0.read().lflen().bits().into())
+    LengthFieldLength::from_bits(radio.pcnf0.read().lflen().bits())
         .expect("invalid LENGTH field length in register")
 }
 
 pub(crate) fn write_lf_len(radio: &RADIO, len: LengthFieldLength) {
-    radio.pcnf0.write(|w| unsafe {
-        w.lflen()
-            .bits(len.inner().try_into().expect("unable to fit u32 into u8"))
-    });
+    radio.pcnf0.write(|w| unsafe { w.lflen().bits(len.0) });
 }
 
 pub(crate) fn read_s0_len(radio: &RADIO) -> S0FieldLength {
-    S0FieldLength::from_bits(radio.pcnf0.read().s0len().bit().into())
+    S0FieldLength::from_bytes(radio.pcnf0.read().s0len().bit().into())
         .expect("invalid S0 field length in register")
 }
 
 pub(crate) fn write_s0_len(radio: &RADIO, len: S0FieldLength) {
-    radio
-        .pcnf0
-        .write(|w| unsafe { w.s0len().bit(len.inner().try_into().unwrap()) });
+    radio.pcnf0.write(|w| w.s0len().bit(len.0));
 }
 
 pub(crate) fn read_s1_len(radio: &RADIO) -> S1FieldLength {
-    S1FieldLength::from_bits(radio.pcnf0.read().s1len().bits().into())
+    S1FieldLength::from_bits(radio.pcnf0.read().s1len().bits())
         .expect("invalid S1 field length in register")
+}
+
+pub(crate) fn write_s1_len(radio: &RADIO, len: S1FieldLength) {
+    radio.pcnf0.write(|w| unsafe { w.s1len().bits(len.0) });
 }
 
 pub(crate) fn get_state(radio: &RADIO) -> Option<crate::State> {
